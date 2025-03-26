@@ -1,8 +1,7 @@
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
-from .manage_bloomberg_data import OptionDataParser
+from utils.manage_bloomberg_data import OptionDataParser
 
 
 class OptionVolSurface:
@@ -82,7 +81,6 @@ class OptionVolSurface:
         """
         Trace la surface de volatilité en 3D.
         """
-        from mpl_toolkits.mplot3d import Axes3D
         X, Y = np.meshgrid(self.strikes, self.maturities)
         fig = plt.figure(figsize=(10, 7))
         ax = fig.add_subplot(111, projection='3d')

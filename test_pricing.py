@@ -1,7 +1,7 @@
 from Taux.nelson_siegel import NelsonSiegelModel
 from Taux.vol_surface import OptionVolSurface
 from Stochastic_process.black_scholes_process import BlackScholesProcess
-from Taux.manage_bloomberg_data import OptionDataParser
+from utils.manage_bloomberg_data import OptionDataParser
 import numpy as np
 import pandas as pd
 
