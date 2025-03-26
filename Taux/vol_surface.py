@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
-from manage_bloomberg_data import OptionDataParser
+from .manage_bloomberg_data import OptionDataParser
 
 
 class OptionVolSurface:

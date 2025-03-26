@@ -81,55 +81,62 @@ class SvenssonModel(AbstractYieldCurve):
         self.beta0, self.beta1, self.beta2, self.beta3, self.tau1, self.tau2 = res.x
         return res.x
 
+    def plot_fit(self, taus, observed_yields, n_points=100, title="Calibration du modèle Svensson"):
+        """
+        Trace la courbe ajustée par le modèle ainsi que les données observées.
+
+        :param taus: tableau des échéances observées
+        :param observed_yields: tableau des rendements observés
+        :param n_points: nombre de points pour tracer la courbe lissée
+        :param title: titre du graphique
+        """
+        taus_fine = np.linspace(min(taus), max(taus), n_points)
+        fitted_yields = self.yield_curve_array(taus_fine)
+
+        fig = go.Figure()
+
+        fig.add_trace(go.Scatter(
+            x=taus,
+            y=observed_yields,
+            mode='markers',
+            name="Données observées",
+            marker=dict(color='black')
+        ))
+
+        fig.add_trace(go.Scatter(
+            x=taus_fine,
+            y=fitted_yields,
+            mode='lines',
+            name="Courbe Svensson"
+        ))
+
+        fig.update_layout(
+            title=title,
+            xaxis_title="Échéance (tau)",
+            yaxis_title="Rendement",
+            template="plotly_white"
+        )
+
+        fig.show()
+
 
 if __name__ == "__main__":
     np.random.seed(123)
     # --- Chargement et nettoyage des données ---
     data = pd.read_excel("../data_taux/RateCurve_temp.xlsx")
 
-    taus_raw = data['Matu'].values  # On suppose ici que la colonne 'tau' contient des dates
+    taus_raw = data['Matu'].values
     observed_yields = data['Rate'].values
 
     # --- Calibration du modèle Svensson ---
-    # Estimation initiale : ici, tau1 et tau2 sont exprimés en jours (ex : 365 pour 1 an, 730 pour 2 ans)
     initial_guess_sv = [2.5, -1.0, 0.5, 0.3, 1.0, 2.0]
     svensson_model = SvenssonModel(beta0=initial_guess_sv[0], beta1=initial_guess_sv[1],
                                    beta2=initial_guess_sv[2], beta3=initial_guess_sv[3],
                                    tau1=initial_guess_sv[4], tau2=initial_guess_sv[5])
-    params_sv = svensson_model.calibrate(taus_raw, observed_yields, initial_guess_sv, )
+    params_sv = svensson_model.calibrate(taus_raw, observed_yields, initial_guess_sv)
     print("\nParamètres calibrés (Svensson) :")
-    print(
-        f"beta0 = {params_sv[0]:.4f}, beta1 = {params_sv[1]:.4f}, beta2 = {params_sv[2]:.4f}, beta3 = {params_sv[3]:.4f}, tau1 = {params_sv[4]:.4f}, tau2 = {params_sv[5]:.4f}")
+    print(f"beta0 = {params_sv[0]:.4f}, beta1 = {params_sv[1]:.4f}, beta2 = {params_sv[2]:.4f}, "
+          f"beta3 = {params_sv[3]:.4f}, tau1 = {params_sv[4]:.4f}, tau2 = {params_sv[5]:.4f}")
 
-    # Création d'une grille fine sur l'intervalle de taus_raw
-    taus_fine = np.linspace(min(taus_raw), max(taus_raw), 100)
-    sv_yields = svensson_model.yield_curve_array(taus_fine)
-
-    # Création de la figure Plotly
-    fig = go.Figure()
-
-    # Ajout des données observées
-    fig.add_trace(go.Scatter(
-        x=taus_raw,
-        y=observed_yields,
-        mode='markers',
-        name="Données observées",
-        marker=dict(color='black')
-    ))
-
-    # Ajout de la courbe du modèle Svensson calibré
-    fig.add_trace(go.Scatter(
-        x=taus_fine,
-        y=sv_yields,
-        mode='lines',
-        name="Courbe Svensson"
-    ))
-
-    fig.update_layout(
-        title="Calibration du modèle Svensson",
-        xaxis_title="Échéance (tau)",
-        yaxis_title="Rendement",
-        template="plotly_white"
-    )
-
-    fig.show()
+    # --- Affichage des courbes de taux (plot fit) ---
+    svensson_model.plot_fit(taus_raw, observed_yields)

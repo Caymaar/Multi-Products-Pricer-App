@@ -70,6 +70,44 @@ class NelsonSiegelModel(AbstractYieldCurve):
         self.beta0, self.beta1, self.beta2, self.tau1 = res.x
         return res.x
 
+    def plot_fit(self, taus, observed_yields, n_points=100, title="Calibration du modèle Nelson-Siegel"):
+        """
+        Trace la courbe ajustée par le modèle ainsi que les données observées.
+
+        :param taus: tableau des échéances observées
+        :param observed_yields: tableau des rendements observés
+        :param n_points: nombre de points pour tracer la courbe lissée
+        :param title: titre du graphique
+        """
+        taus_fine = np.linspace(min(taus), max(taus), n_points)
+        fitted_yields = self.yield_curve_array(taus_fine)
+
+        fig = go.Figure()
+
+        fig.add_trace(go.Scatter(
+            x=taus,
+            y=observed_yields,
+            mode='markers',
+            name="Données observées",
+            marker=dict(color='black')
+        ))
+
+        fig.add_trace(go.Scatter(
+            x=taus_fine,
+            y=fitted_yields,
+            mode='lines',
+            name="Courbe Nelson-Siegel"
+        ))
+
+        fig.update_layout(
+            title=title,
+            xaxis_title="Échéance (tau)",
+            yaxis_title="Rendement",
+            template="plotly_white"
+        )
+
+        fig.show()
+
 if __name__ == "__main__":
     np.random.seed(123)
     data = pd.read_excel("../data_taux/RateCurve_temp.xlsx")
@@ -88,33 +126,4 @@ if __name__ == "__main__":
     print(
         f"beta0 = {params_ns[0]:.4f}, beta1 = {params_ns[1]:.4f}, beta2 = {params_ns[2]:.4f}, tau1 = {params_ns[3]:.4f}")
 
-
-    # --- Affichage des courbes de taux ---
-    taus_fine = np.linspace(min(taus_raw), max(taus_raw), 100)
-    sv_yields = ns_model.yield_curve_array(taus_fine)
-
-    fig = go.Figure()
-
-    fig.add_trace(go.Scatter(
-        x=taus_raw,
-        y=observed_yields,
-        mode='markers',
-        name="Données observées",
-        marker=dict(color='black')
-    ))
-
-    fig.add_trace(go.Scatter(
-        x=taus_fine,
-        y=sv_yields,
-        mode='lines',
-        name="Courbe Nelson-Siegel"
-    ))
-
-    fig.update_layout(
-        title="Calibration du modèle Nelson-Siegel",
-        xaxis_title="Échéance (tau)",
-        yaxis_title="Rendement",
-        template="plotly_white"
-    )
-
-    fig.show()
+    ns_model.plot_fit(taus_raw, observed_yields, title="Calibration du modèle Nelson-Siegel")
