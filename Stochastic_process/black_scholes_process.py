@@ -1,5 +1,5 @@
 import numpy as np
-from .abstract_sctochastic import AbstractStochasticProcess
+from .abstract_stochastic import AbstractStochasticProcess
 
 
 class BlackScholesProcess(AbstractStochasticProcess):
