@@ -4,9 +4,8 @@ from scipy.optimize import minimize
 import plotly.graph_objects as go
 from abstract_taux import AbstractYieldCurve
 
-
 class SvenssonModel(AbstractYieldCurve):
-    def __init__(self, beta0, beta1, beta2, beta3, tau1, tau2):
+    def __init__(self, beta0, beta1, beta2, beta3, lambda1, lambda2):
         """
         Initialisation du modèle Svensson.
 
@@ -15,88 +14,89 @@ class SvenssonModel(AbstractYieldCurve):
         - beta1 : composante de la pente
         - beta2 : première composante de la courbure
         - beta3 : deuxième composante de la courbure
-        - tau1  : premier facteur de déclin
-        - tau2  : deuxième facteur de déclin
+        - lambda1  : premier facteur de déclin
+        - lambda2  : deuxième facteur de déclin
         """
         self.beta0 = beta0
         self.beta1 = beta1
         self.beta2 = beta2
         self.beta3 = beta3
-        self.tau1 = tau1
-        self.tau2 = tau2
+        self.lambda1 = lambda1
+        self.lambda2 = lambda2
 
-    def yield_curve(self, tau):
+    def yield_curve(self, t):
         """
-        Calcule le taux pour une échéance donnée tau selon le modèle Svensson.
+        Calcule le taux pour une échéance donnée t selon le modèle Svensson.
 
-        Pour tau == 0, on utilise la limite :
+        Pour t == 0, on utilise la limite :
         y(0) = beta0 + beta1 + beta2/2 + beta3/2
         """
-        if tau == 0:
+        if t == 0:
             return self.beta0 + self.beta1 + 0.5 * (self.beta2 + self.beta3)
 
-        factor1 = tau / self.tau1
-        factor2 = tau / self.tau2
+        factor1 = t / self.lambda1
+        factor2 = t / self.lambda2
 
         term1 = (1 - np.exp(-factor1)) / factor1
         term2 = term1 - np.exp(-factor1)
-        term3 = (1 - np.exp(-factor2)) / factor2 - np.exp(-factor2)
+        term3 = (1 - np.exp(-factor2)) / factor2 #- np.exp(-factor2)
 
         return self.beta0 + self.beta1 * term1 + self.beta2 * term2 + self.beta3 * term3
 
-    def yield_curve_array(self, taus):
+    def yield_curve_array(self, maturities):
         """
         Calcule la courbe des taux pour un tableau d'échéances.
         """
-        return np.array([self.yield_curve(tau) for tau in taus])
+        return np.array([self.yield_curve(t) for t in maturities])
 
-    def calibrate(self, taus, observed_yields, initial_guess):
+    def calibrate(self, maturities, observed_yields, initial_guess):
         """
         Calibre les paramètres du modèle en minimisant l'erreur quadratique entre
         les rendements observés et ceux générés par le modèle, en utilisant l'algorithme Nelder-Mead.
 
-        :param taus: tableau des échéances
+        :param maturities: tableau des échéances
         :param observed_yields: tableau des rendements observés
-        :param initial_guess: estimation initiale pour [beta0, beta1, beta2, beta3, tau1, tau2]
+        :param initial_guess: estimation initiale pour [beta0, beta1, beta2, beta3, lambda1, lambda2]
         :return: les paramètres calibrés
         """
 
         def objective(params):
-            beta0, beta1, beta2, beta3, tau1, tau2 = params
+            beta0, beta1, beta2, beta3, lambda1, lambda2 = params
             error = 0.0
-            for tau, obs in zip(taus, observed_yields):
-                if tau == 0:
+            for t, obs in zip(maturities, observed_yields):
+                if t == 0:
                     y_model = beta0 + beta1 + 0.5 * (beta2 + beta3)
                 else:
-                    factor1 = tau / tau1
-                    factor2 = tau / tau2
+                    factor1 = t / lambda1
+                    factor2 = t / lambda2
+
                     term1 = (1 - np.exp(-factor1)) / factor1
                     term2 = term1 - np.exp(-factor1)
-                    term3 = (1 - np.exp(-factor2)) / factor2 - np.exp(-factor2)
+                    term3 = (1 - np.exp(-factor2)) / factor2 #- np.exp(-factor2)
                     y_model = beta0 + beta1 * term1 + beta2 * term2 + beta3 * term3
                 error += (y_model - obs) ** 2
             return error
 
         res = minimize(objective, initial_guess, method='Nelder-Mead')
-        self.beta0, self.beta1, self.beta2, self.beta3, self.tau1, self.tau2 = res.x
+        self.beta0, self.beta1, self.beta2, self.beta3, self.lambda1, self.lambda2 = res.x
         return res.x
 
-    def plot_fit(self, taus, observed_yields, n_points=100, title="Calibration du modèle Svensson"):
+    def plot_fit(self, maturities, observed_yields, n_points=100, title="Calibration du modèle Svensson"):
         """
         Trace la courbe ajustée par le modèle ainsi que les données observées.
 
-        :param taus: tableau des échéances observées
+        :param maturities: tableau des échéances observées
         :param observed_yields: tableau des rendements observés
         :param n_points: nombre de points pour tracer la courbe lissée
         :param title: titre du graphique
         """
-        taus_fine = np.linspace(min(taus), max(taus), n_points)
-        fitted_yields = self.yield_curve_array(taus_fine)
+        maturities_fine = np.linspace(min(maturities), max(maturities), n_points)
+        fitted_yields = self.yield_curve_array(maturities_fine)
 
         fig = go.Figure()
 
         fig.add_trace(go.Scatter(
-            x=taus,
+            x=maturities,
             y=observed_yields,
             mode='markers',
             name="Données observées",
@@ -104,7 +104,7 @@ class SvenssonModel(AbstractYieldCurve):
         ))
 
         fig.add_trace(go.Scatter(
-            x=taus_fine,
+            x=maturities_fine,
             y=fitted_yields,
             mode='lines',
             name="Courbe Svensson"
@@ -112,7 +112,7 @@ class SvenssonModel(AbstractYieldCurve):
 
         fig.update_layout(
             title=title,
-            xaxis_title="Échéance (tau)",
+            xaxis_title="Échéance (t)",
             yaxis_title="Rendement",
             template="plotly_white"
         )
@@ -125,18 +125,18 @@ if __name__ == "__main__":
     # --- Chargement et nettoyage des données ---
     data = pd.read_excel("../data_taux/RateCurve_temp.xlsx")
 
-    taus_raw = data['Matu'].values
+    maturities_raw = data['Matu'].values
     observed_yields = data['Rate'].values
 
     # --- Calibration du modèle Svensson ---
     initial_guess_sv = [2.5, -1.0, 0.5, 0.3, 1.0, 2.0]
     svensson_model = SvenssonModel(beta0=initial_guess_sv[0], beta1=initial_guess_sv[1],
                                    beta2=initial_guess_sv[2], beta3=initial_guess_sv[3],
-                                   tau1=initial_guess_sv[4], tau2=initial_guess_sv[5])
-    params_sv = svensson_model.calibrate(taus_raw, observed_yields, initial_guess_sv)
+                                   lambda1=initial_guess_sv[4], lambda2=initial_guess_sv[5])
+    params_sv = svensson_model.calibrate(maturities_raw, observed_yields, initial_guess_sv)
     print("\nParamètres calibrés (Svensson) :")
     print(f"beta0 = {params_sv[0]:.4f}, beta1 = {params_sv[1]:.4f}, beta2 = {params_sv[2]:.4f}, "
-          f"beta3 = {params_sv[3]:.4f}, tau1 = {params_sv[4]:.4f}, tau2 = {params_sv[5]:.4f}")
+          f"beta3 = {params_sv[3]:.4f}, lambda1 = {params_sv[4]:.4f}, lambda2 = {params_sv[5]:.4f}")
 
     # --- Affichage des courbes de taux (plot fit) ---
-    svensson_model.plot_fit(taus_raw, observed_yields)
+    svensson_model.plot_fit(maturities_raw, observed_yields)

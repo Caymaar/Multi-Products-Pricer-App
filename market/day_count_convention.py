@@ -9,6 +9,7 @@ class DayCountConvention:
         :param convention: chaîne de caractères indiquant la convention ("Actual/360", "Actual/365", "30/360", "Actual/Actual")
         """
         self.convention = convention.lower()
+        self.days_in_year = float(convention.split("/")[0])
 
     def year_fraction(self, start_date, end_date):
         """

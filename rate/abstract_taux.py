@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 
-
 class AbstractTaux(ABC):
+
     @abstractmethod
     def get_taux(self, x_val):
         """
