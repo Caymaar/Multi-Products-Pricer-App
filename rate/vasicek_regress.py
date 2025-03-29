@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 import plotly.graph_objects as go
-from stochastic_process.ou_process import OUProcess
+from Stochastic_process.ou_process import OUProcess
 
 class VasicekModel:
     def __init__(self, r0):
