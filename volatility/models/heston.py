@@ -34,7 +34,7 @@ def CallPutOptionPriceCOSMthd(cf, CP, S0, r, tau, K, N, L):
 
     # Assigning i=sqrt(-1)
 
-    i = np.complex(0.0, 1.0)
+    i = complex(0.0, 1.0)
     x0 = np.log(S0 / K)
 
     # Truncation domain
@@ -100,7 +100,7 @@ def CallPutCoefficients(CP, a, b, k):
 
 
 def ChFHestonModel(r, tau, kappa, gamma, vbar, v0, rho):
-    i = np.complex(0.0, 1.0)
+    i = complex(0.0, 1.0)
     D1 = lambda u: np.sqrt(np.power(kappa - gamma * rho * i * u, 2) + (u * u + i * u) * gamma * gamma)
     g = lambda u: (kappa - gamma * rho * i * u - D1(u)) / (kappa - gamma * rho * i * u + D1(u))
     C = lambda u: (1.0 - np.exp(-D1(u) * tau)) / (gamma * gamma * (1.0 - g(u) * np.exp(-D1(u) * tau))) \
