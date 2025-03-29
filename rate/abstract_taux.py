@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
 
+
+# ---------------- Interpolation des Taux ----------------
 class AbstractTaux(ABC):
 
     @abstractmethod
@@ -12,6 +14,8 @@ class AbstractTaux(ABC):
         """
         pass
 
+
+# ---------------- Courbe des taux ----------------
 class AbstractYieldCurve(ABC):
     @abstractmethod
     def yield_curve(self, tau):
