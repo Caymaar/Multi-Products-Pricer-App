@@ -20,7 +20,7 @@ df_options = OptionDataParser.prepare_option_data(file_path)
 vol_surface = OptionVolSurface(df_options)
 
 # 1. Calibration de la courbe des taux
-ns_model = NelsonSiegelModel(beta0=4.0, beta1=-1.0, beta2=0.5, tau1=2)
+ns_model = NelsonSiegelModel(beta0=4.0, beta1=-1.0, beta2=0.5, lambda1=2)
 ns_model.calibrate(taus_raw, observed_yields, initial_guess=[4.0, -1.0, 0.5, 2])
 ns_model.plot_fit(taus_raw, observed_yields)
 

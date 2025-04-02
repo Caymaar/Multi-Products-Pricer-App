@@ -94,7 +94,7 @@ class OptionVolSurface:
 
 # Exemple d'utilisation (test) si le module est exécuté en tant que script principal
 if __name__ == "__main__":
-    file_path = "../data_options/options_data_TSLA 2.xlsx"  # Adapté au fichier pour AAPL
+    file_path = "../data_options/options_data_MSFT 2.xlsx"  # Adapté au fichier pour AAPL
     df_options = OptionDataParser.prepare_option_data(file_path)
     print("Données extraites :", df_options)
 

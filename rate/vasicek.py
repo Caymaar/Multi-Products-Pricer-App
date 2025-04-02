@@ -2,6 +2,7 @@ import numpy as np
 from scipy.optimize import minimize
 import pandas as pd
 import plotly.graph_objects as go
+from product import ZeroCouponBond
 
 class VasicekModel:
     def __init__(self, r0, kappa, theta, sigma):

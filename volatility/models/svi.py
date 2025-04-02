@@ -44,6 +44,9 @@ class SVI(VolatilityModel):
         """
         log_moneyness = math.log(parameters.strike / parameters.spot)
         total_var = self.total_variance(log_moneyness)
+        if total_var < 0:
+            return 0.0
+
         return math.sqrt(total_var / parameters.maturity)
 
     def set_parameters(self, params: List[float]) -> None:
@@ -67,7 +70,7 @@ class SVI(VolatilityModel):
             error_sum = 0.0
             for data in opt_data:
                 svi_params = SVIParams(strike=data.strike, maturity=data.maturity, spot=spot)
-                model_vol = self.get_volatility(svi_params) * 100
+                model_vol = self.get_volatility(svi_params) * 100  # en pourcentage
                 error = model_vol - data.implied_volatility
                 error_sum += error**2
             return error_sum
@@ -96,7 +99,7 @@ class SVI(VolatilityModel):
         for i in range(strikes.shape[0]):
             for j in range(strikes.shape[1]):
                 params = SVIParams(strike=strikes[i, j], maturity=maturities[i, j], spot=spot)
-                vol_surface[i, j] = self.get_volatility(params) * 100  # en pourcentage
+                vol_surface[i, j] = self.get_volatility(params)  # en pourcentage
 
         # Création du plot 3D
         fig = plt.figure()
@@ -104,7 +107,7 @@ class SVI(VolatilityModel):
         surf = ax.plot_surface(strikes, maturities, vol_surface, cmap='viridis', edgecolor='none')
         ax.set_xlabel('Strike')
         ax.set_ylabel('Maturity')
-        ax.set_zlabel('Volatility (%)')
+        ax.set_zlabel('Implied volatility (%)')
         ax.set_title('SVI Volatility Surface')
         fig.colorbar(surf, shrink=0.5, aspect=5)
         plt.show()
@@ -120,7 +123,7 @@ if __name__ == "__main__":
         for _, row in df_options.iterrows()
     ]
 
-    spot = 240.0
+    spot = 220.0
     calibration_params = SVICalibrationParams(opt_data=opt_data, spot=spot)
     svi_model = SVI()
     svi_model.calibrate(calibration_params)
@@ -133,7 +136,7 @@ if __name__ == "__main__":
     print("Sigma =", svi_model.sigma)
 
     # Définir des plages pour strikes et maturités pour le plot
-    strike_range = np.linspace(230, 250, 50)
+    strike_range = np.linspace(100, 300, 50)
     maturity_range = np.linspace(0.05, 2, 50)
 
     # Affichage de la surface de volatilité
