@@ -2,6 +2,7 @@ from typing import Any
 from ..abstract_volatility import VolatilityModel
 from ..calibration.cste_calibration_params import CsteCalibrationParams
 
+
 class CsteVolatility(VolatilityModel):
     def __init__(self) -> None:
         # Initialisation par défaut de la volatilité constante à 0.0

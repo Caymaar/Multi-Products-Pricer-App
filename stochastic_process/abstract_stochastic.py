@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from stochastic_process.brownian_motion import BrownianMotion
+from .brownian_motion import BrownianMotion
 
 class AbstractStochasticProcess(ABC):
     """Classe mère pour tous les processus stochastiques."""
