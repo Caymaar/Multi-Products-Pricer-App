@@ -1,5 +1,5 @@
 import numpy as np
-from stochastic_process.abstract_stochastic import AbstractStochasticProcess
+from .abstract_stochastic import AbstractStochasticProcess
 
 class GBMProcess(AbstractStochasticProcess):
     # ---------------- GBMProcess Class ----------------

@@ -3,8 +3,9 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import os
 
+# ------------------------- Calibration Vasicek par la méthode Euler–Maruyama -------------------------
 
-# Simulation d'une trajectoire du modèle de Vasicek par la méthode Euler–Maruyama
+
 def simulate_vasicek(a, b, sigma, r0, dt, N):
     """
     Simule une trajectoire du modèle de Vasicek.
