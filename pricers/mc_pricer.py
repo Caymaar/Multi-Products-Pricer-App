@@ -19,7 +19,7 @@ class MonteCarloEngine(Engine):
     def _price_american_lsm(self, paths, analysis=False):
         global price_by_time
 
-        CF = self.option.payoff(paths[:,-1]) # Valeur du payoff à l'échéance
+        CF = self.option.intrinsic_value(paths) # Valeur du payoff à l'échéance
 
         if analysis:
             price_by_time = []
@@ -28,7 +28,7 @@ class MonteCarloEngine(Engine):
         for t in range(self.n_steps - 2, -1, -1):
 
             CF *= self.df # Actualisation en un seul calcul
-            immediate = self.option.payoff(paths[:, t])
+            immediate = self.option.intrinsic_value(paths[:,:t+1])
             in_money = immediate > 0  # Mask des options ITM
 
             if np.any(in_money):  # Vérifie si au moins une option est ITM

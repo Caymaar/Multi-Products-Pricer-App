@@ -1,10 +1,8 @@
 # products/concrete_strategies.py
-from strategy.strategy import Strategy
+from portfolio.strategy import Strategy
 from option.option import Call, Put
 
 # ---------------- Strategy Class Vanille ----------------
-
-
 class BearCallSpread(Strategy):
     def __init__(self, strike_sell, strike_buy, maturity, exercise="european"):
         """
@@ -100,8 +98,6 @@ class Straddle(Strategy):
         return [(self.call, 1), (self.put, 1)]
 
 # ---------------- Strategy Class Exotiques ----------------
-
-
 class Strap(Strategy):
     def __init__(self, strike, maturity, exercise="european"):
         """

@@ -4,21 +4,19 @@ import pandas as pd
 import os
 
 # ------------------------- Calibration Vasicek par la méthode Euler–Maruyama -------------------------
-
-
 def simulate_vasicek(a, b, sigma, r0, dt, N):
     """
     Simule une trajectoire du modèle de Vasicek.
 
     Paramètres:
-        a     : vitesse de réversion
-        b     : taux de long terme
-        sigma : volatilité
-        r0    : taux initial
-        dt    : pas de temps
-        N     : nombre de pas
+        :param a: vitesse de réversion
+        :param b: taux de long terme
+        :param sigma: volatilité
+        :param r0: taux initial
+        :param dt: pas de temps
+        :param N: nombre de pas
     Retourne:
-        r     : trajectoire simulée des taux d'intérêt
+        r: trajectoire simulée des taux d'intérêt
     """
     r = np.zeros(N)
     r[0] = r0
@@ -31,13 +29,13 @@ def simulate_vasicek_paths(a, b, sigma, r0, T, dt, n_paths):
     Simule n_paths trajectoires du modèle de Vasicek en utilisant la méthode Euler–Maruyama.
 
     Paramètres:
-        a       : vitesse de réversion
-        b       : taux de long terme
-        sigma   : volatilité
-        r0      : taux initial
-        T       : horizon de temps (en années)
-        dt      : pas de temps (en années)
-        n_paths : nombre de trajectoires à simuler
+        :param a: vitesse de réversion
+        :param b: taux de long terme
+        :param sigma: volatilité
+        :param r0: taux initial
+        :param T: horizon de temps (en années)
+        :param dt: pas de temps (en années)
+        :param n_paths : nombre de trajectoires à simuler
 
     Retourne:
         r : tableau NumPy de dimensions (n_paths, N)
@@ -51,7 +49,6 @@ def simulate_vasicek_paths(a, b, sigma, r0, T, dt, n_paths):
         for t in range(1, N):
             # Discrétisation Euler–Maruyama
             r[i, t] = r[i, t-1] + a*(b - r[i, t-1])*dt + sigma*np.sqrt(dt)*np.random.randn()
-
     return r
 
 # Calibration par moindres carrés (Least Squares)

@@ -4,7 +4,6 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 import pandas as pd
 
-
 # On suppose que vous avez défini vos classes SVIParams, MarketDataPoint, SVICalibrationParams
 # et éventuellement OptionDataParser dans votre module data_management.manage_bloomberg_data.
 # Ici nous nous concentrons sur la construction de la surface de volatilité à partir de SPX data.

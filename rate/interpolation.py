@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.interpolate import interp1d
 
 class TauxInterpolation:
     def __init__(self, x, y, kind='linear'):
@@ -29,9 +30,6 @@ class TauxInterpolation:
         x0, x1 = self.x[idx], self.x[idx + 1]
         y0, y1 = self.y[idx], self.y[idx + 1]
 
-        # from scipy.interpolate import interp1d
-        #interp1d(self.x, self.y, kind="linear", fill_value="extrapolate")
-
         # Formule de l'interpolation linéaire
         return y0 + (y1 - y0) * (x_val - x0) / (x1 - x0)
 
@@ -47,16 +45,17 @@ class TauxInterpolation:
         x0, x1, x2, x3 = self.x[idx - 1: idx + 3]
         y0, y1, y2, y3 = self.y[idx - 1: idx + 3]
 
-        # Calcul de l'interpolation cubique avec la méthode de spline naturelle
-        # Formule de l'interpolation cubique
+        # Résolution du système de spline naturelle :
+        dx0 = x1 - x0
+        dx1 = x2 - x1
+        dx2 = x3 - x2
+
         a0 = y1
-        a1 = (y2 - y0) / (x2 - x0) - (x2 - x0) * (y3 - y1) / (x3 - x1)
-        a2 = (y3 - y1) / (x3 - x1) - (x3 - x1) * (y2 - y0) / (x2 - x0)
-        a3 = (y3 - y2) / (x3 - x2)
+        a1 = (y2 - y0) / dx1 - (y3 - y1) / dx2
+        a2 = (y3 - y1) / dx2 - (y2 - y0) / dx1
+        a3 = (y3 - 2 * y2 + y1) / (dx1 * dx2)
 
-        #interp1d(self.x, self.y, kind="cubic", fill_value="extrapolate")
-
-        # Formule de l'interpolation cubique
+        # Retourne l'interpolation cubique
         return a0 + a1 * (x_val - x1) + a2 * (x_val - x1) ** 2 + a3 * (x_val - x1) ** 3
 
     def get_taux(self, x_val):
@@ -67,5 +66,29 @@ class TauxInterpolation:
             return self._linear_interpolation(x_val)
         elif self.kind == 'cubic':
             return self._cubic_interpolation(x_val)
+        elif self.kind == 'refined cubic': # utilisation du package pour plus de précision
+            interpolator = interp1d(self.x, self.y, kind='cubic', fill_value="extrapolate")
+            return float(interpolator(x_val))
         else:
             raise ValueError("Le type d'interpolation doit être 'linear' ou 'cubic'.")
+
+class TauxInterpolation2:
+    def __init__(self, x, y, kind='linear'):
+        """
+        Initialise l'interpolateur.
+
+        :param x: array-like, les maturités (ex: [1, 2, 3, 5])
+        :param y: array-like, les taux correspondants à chaque maturité
+        :param kind: type d'interpolation ('linear' ou 'cubic')
+        """
+        if len(x) != len(y):
+            raise ValueError("Les tableaux x et y doivent avoir la même longueur")
+
+        self.kind = kind
+        self.interpolator = interp1d(x, y, kind=kind, fill_value="extrapolate")
+
+    def get_taux(self, x_val):
+        """
+        Retourne le taux interpolé pour une valeur donnée de maturité x_val.
+        """
+        return float(self.interpolator(x_val))

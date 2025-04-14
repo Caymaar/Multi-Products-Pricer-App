@@ -9,6 +9,7 @@ class Node:
         self.proba = None            # Proba of reaching the node from the root
         self.NFV = None              # Net Future Value of the Node, based on the discounted average of its children's NFVs
         self.parent = None           # Only trunc Nodes will have a parent (for backward pricing)
+        self.barrier_triggered = False # for options
 
     def Triplet(self, mid, up, down):
         self.child_mid = mid

@@ -2,8 +2,6 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 # ---------------- Abstract Volatility Model ----------------
-
-
 class VolatilityModel(ABC):
     @abstractmethod
     def get_volatility(self, parameters: Any) -> float:

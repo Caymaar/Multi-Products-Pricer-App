@@ -1,8 +1,6 @@
 from abc import ABC, abstractmethod
 
 # ---------------- Base Bond Class ----------------
-
-
 class Bond(ABC):
     def __init__(self, face_value, maturity):
         """
@@ -67,7 +65,7 @@ class FixedRateBond(Bond):
 
 
 class FloatingRateBond(Bond):
-    def __init__(self, face_value, margin, maturity, frequency=1, forecasted_rates=None, discount_rate=None):
+    def __init__(self, face_value, margin, maturity, multiplier=1, frequency=1, forecasted_rates=None, discount_rate=None):
         """
         Obligation à taux variable.
 
@@ -84,6 +82,7 @@ class FloatingRateBond(Bond):
         self.margin = margin
         self.frequency = frequency
         self.discount_rate = discount_rate
+        self.multiplier = multiplier
         n_periods = int(maturity * frequency)
         if forecasted_rates is None:
             self.forecasted_rates = [0.02] * n_periods
@@ -103,7 +102,7 @@ class FloatingRateBond(Bond):
         n_periods = int(self.maturity * self.frequency)
         price = 0
         for i in range(n_periods):
-            coupon_rate = self.forecasted_rates[i] + self.margin
+            coupon_rate = self.multiplier * self.forecasted_rates[i] + self.margin
             coupon = self.face_value * coupon_rate / self.frequency
             discount_factor = 1 / ((1 + self.discount_rate / self.frequency) ** (i + 1))
             price += coupon * discount_factor
@@ -112,7 +111,6 @@ class FloatingRateBond(Bond):
 
 
 # Exemple d'utilisation :
-
 if __name__ == "__main__":
     # Obligation zéro coupon
     zcb = ZeroCouponBond(face_value=1000, yield_rate=0.05, maturity=5)

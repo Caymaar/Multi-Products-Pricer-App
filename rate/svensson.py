@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 from abstract_taux import AbstractYieldCurve
 
 class SvenssonModel(AbstractYieldCurve):
-    def __init__(self, beta0, beta1, beta2, beta3, lambda1, lambda2):
+    def __init__(self, beta0, beta1, beta2, beta3, lambda1, lambda2, maturities, observed_yields, initial_guess):
         """
         Initialisation du modèle Svensson.
 
@@ -23,6 +23,7 @@ class SvenssonModel(AbstractYieldCurve):
         self.beta3 = beta3
         self.lambda1 = lambda1
         self.lambda2 = lambda2
+        self.params = self.calibrate(maturities,observed_yields,initial_guess)
 
     def yield_curve(self, t):
         """
@@ -132,8 +133,10 @@ if __name__ == "__main__":
     initial_guess_sv = [2.5, -1.0, 0.5, 0.3, 1.0, 2.0]
     svensson_model = SvenssonModel(beta0=initial_guess_sv[0], beta1=initial_guess_sv[1],
                                    beta2=initial_guess_sv[2], beta3=initial_guess_sv[3],
-                                   lambda1=initial_guess_sv[4], lambda2=initial_guess_sv[5])
-    params_sv = svensson_model.calibrate(maturities_raw, observed_yields, initial_guess_sv)
+                                   lambda1=initial_guess_sv[4], lambda2=initial_guess_sv[5],
+                                   maturities=maturities_raw, observed_yields=observed_yields,
+                                   initial_guess=initial_guess_sv)
+    params_sv = svensson_model.params
     print("\nParamètres calibrés (Svensson) :")
     print(f"beta0 = {params_sv[0]:.4f}, beta1 = {params_sv[1]:.4f}, beta2 = {params_sv[2]:.4f}, "
           f"beta3 = {params_sv[3]:.4f}, lambda1 = {params_sv[4]:.4f}, lambda2 = {params_sv[5]:.4f}")
