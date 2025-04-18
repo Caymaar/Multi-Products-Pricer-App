@@ -16,11 +16,11 @@ class SVI(VolatilityModel):
     def __init__(self, alpha: float = 0.1, beta: float = 0.1, rho: float = 0.1, m: float = 0.1, sigma: float = 0.1) -> None:
         """
         Initialise le modèle SVI avec les paramètres par défaut ou fournis.
-        :param alpha: Paramètre alpha
-        :param beta: Paramètre beta
-        :param rho: Paramètre rho
-        :param m: Paramètre m (décalage)
-        :param sigma: Paramètre sigma
+        :param alpha: Paramètre alpha : comme niveau de la volatilité
+        :param beta: Paramètre beta (strict pos.) : comme niveau & amplitude de courbe
+        :param rho: Paramètre rho (inf à 1 en absolu) ; comme pentification de la partie gauche de la courbe (strikes faibles)
+        :param m: Paramètre m ; décalage et ajustement de la pente à droite (strikes élevés)
+        :param sigma: Paramètre sigma ; niveau de la volatilité et courbure globale
         """
         self.alpha = alpha
         self.beta = beta
@@ -31,7 +31,7 @@ class SVI(VolatilityModel):
     def total_variance(self, log_moneyness: float) -> float:
         """
         Calcule la variance totale selon la formule SVI pour une moneyness donnée.
-        :param log_moneyness: log(S/Strike)
+        :param log_moneyness: log(Strike/S)
         :return: Variance totale.
         """
         return self.alpha + self.beta * (
@@ -47,7 +47,7 @@ class SVI(VolatilityModel):
         """
         log_moneyness = math.log(parameters.strike / parameters.spot)
         total_var = self.total_variance(log_moneyness)
-        if total_var < 0:
+        if total_var < 0 :
             return 0.0
 
         return math.sqrt(total_var / parameters.maturity)
@@ -69,14 +69,14 @@ class SVI(VolatilityModel):
         opt_data = calibration_params.opt_data
         spot = calibration_params.spot
 
-        # Définition des bornes pour chaque paramètre (à ajuster selon votre contexte)
+        # Définition des bornes pour chaque paramètre (à ajuster)
         amin, amax = 1e-5, 5.0        # Bornes pour alpha
         bmin, bmax = 1e-3, 1.0         # Bornes pour beta
         rho_min, rho_max = -0.999, 0.999   # Bornes pour rho
         m_min, m_max = -1.0, 1.0       # Bornes pour m (décalage)
         sigma_min, sigma_max = 0.01, 1.0  # Bornes pour sigma
 
-        penalty_coef = 1e6  # Coefficient de pénalité (à ajuster)
+        penalty_coef = 1e6  # Coefficient de pénalité
 
         def objective_function(x: np.ndarray) -> float:
             self.set_parameters(x.tolist())
@@ -199,7 +199,7 @@ if __name__ == "__main__":
     # Assure-toi que le fichier Excel contient déjà les colonnes "maturity", "strike" et "iv".
     # Décommente cette section si tu travailles avec ce format.
     # =============================================================
-    DATA_PATH = os.path.dirname(__file__) + "../../../data_options"
+    DATA_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../data_options"))
     # file_path = f"{DATA_PATH}/options_data_TSLA 2.xlsx"
     # df_options = OptionDataParser.prepare_option_data(file_path)
     # # On suppose que df_options contient déjà les colonnes "maturity", "strike" et "iv".

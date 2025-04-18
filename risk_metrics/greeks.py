@@ -28,7 +28,7 @@ class GreeksCalculator:
 
         if issubclass(type(self._original_model), MonteCarloEngine):
             new_params["n_paths"] = self._original_model.n_paths
-            new_params["seed"] = self._original_model.PathGenerator.brownian.seed
+            new_params["seed"] = self._original_model.GBMProcess.brownian.seed
 
         new_params.update(kwargs)
         return type(self._original_model)(**new_params)

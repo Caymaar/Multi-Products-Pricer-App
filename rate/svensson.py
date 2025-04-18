@@ -2,9 +2,9 @@ import pandas as pd
 import numpy as np
 from scipy.optimize import minimize
 import plotly.graph_objects as go
-from abstract_taux import AbstractYieldCurve
+from abstract_taux import AbstractRateModel
 
-class SvenssonModel(AbstractYieldCurve):
+class SvenssonModel(AbstractRateModel):
     def __init__(self, beta0, beta1, beta2, beta3, lambda1, lambda2, maturities, observed_yields, initial_guess):
         """
         Initialisation du modèle Svensson.
@@ -25,7 +25,7 @@ class SvenssonModel(AbstractYieldCurve):
         self.lambda2 = lambda2
         self.params = self.calibrate(maturities,observed_yields,initial_guess)
 
-    def yield_curve(self, t):
+    def yield_value(self, t):
         """
         Calcule le taux pour une échéance donnée t selon le modèle Svensson.
 
@@ -44,22 +44,17 @@ class SvenssonModel(AbstractYieldCurve):
 
         return self.beta0 + self.beta1 * term1 + self.beta2 * term2 + self.beta3 * term3
 
-    def yield_curve_array(self, maturities):
-        """
-        Calcule la courbe des taux pour un tableau d'échéances.
-        """
-        return np.array([self.yield_curve(t) for t in maturities])
-
     def calibrate(self, maturities, observed_yields, initial_guess):
         """
-        Calibre les paramètres du modèle en minimisant l'erreur quadratique entre
-        les rendements observés et ceux générés par le modèle, en utilisant l'algorithme Nelder-Mead.
+        Calibre les paramètres du modèle Svensson.
 
-        :param maturities: tableau des échéances
-        :param observed_yields: tableau des rendements observés
-        :param initial_guess: estimation initiale pour [beta0, beta1, beta2, beta3, lambda1, lambda2]
-        :return: les paramètres calibrés
+        :param maturities: Tableau des échéances (obligatoire pour ce modèle)
+        :param observed_yields: Tableau des rendements observés
+        :param initial_guess: Estimation initiale des paramètres [beta0, beta1, beta2, beta3, lambda1, lambda2]
+        :return: Les paramètres calibrés
         """
+        if maturities is None or observed_yields is None or initial_guess is None:
+            raise ValueError("Pour Svensson, 'maturities', 'observed_yields' et 'initial_guess' doivent être fournis.")
 
         def objective(params):
             beta0, beta1, beta2, beta3, lambda1, lambda2 = params

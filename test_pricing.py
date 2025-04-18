@@ -1,6 +1,6 @@
 from rate.nelson_siegel import NelsonSiegelModel
 from volatility.vol_surface import OptionVolSurface
-from stochastic_process.black_scholes_process import BlackScholesProcess
+from stochastic_process.gbm_process import GBMProcess
 from data_management.manage_bloomberg_data import OptionDataParser
 import numpy as np
 import pandas as pd
@@ -10,7 +10,6 @@ np.random.seed(123)
 data = pd.read_excel("data_taux/RateCurve_temp.xlsx")
 taus_raw = data['Matu'].values
 observed_yields = data['Rate'].values
-
 
 # data option
 file_path = "data_options/options_data_TSLA 2.xlsx"
@@ -34,7 +33,7 @@ K = 100
 sigma_T = np.interp(K, strikes, vols)
 
 # 4. Simulation de l'actif sous-jacent
-bs_process = BlackScholesProcess(S0=100, r=r_T, sigma=sigma_T)
+bs_process = GBMProcess(S0=100, r=r_T, sigma=sigma_T)
 time_grid, paths = bs_process.simulate(T=T, n_paths=10000, n_steps=252)
 
 # 5. Calcul du payoff et estimation du prix

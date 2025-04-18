@@ -4,7 +4,6 @@ from typing import Any, List, Tuple, Union
 # Pas fini mais c'est l'idée d'avoir un portefeuille d'options et de calculer la sensibilité
 
 # ---------------- SensitivityAnalyzer Class ----------------
-
 class SensitivityAnalyzer:
     def __init__(self, portfolio: Any, engine: Any) -> None:
         """

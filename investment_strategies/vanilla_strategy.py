@@ -1,6 +1,8 @@
-# products/concrete_strategies.py
-from portfolio.strategy import Strategy
+from investment_strategies.strategy import Strategy
 from option.option import Call, Put
+from market.market import Market
+from pricers.mc_pricer import MonteCarloEngine
+from datetime import datetime, timedelta
 
 # ---------------- Strategy Class Vanille ----------------
 class BearCallSpread(Strategy):
@@ -179,3 +181,103 @@ class Condor(Strategy):
 
     def get_legs(self):
         return [(self.call1, 1), (self.call2, -1), (self.call3, -1), (self.call4, 1)]
+
+if __name__ == "__main__":
+
+    # --- Date de pricing et maturité à +1 an ---
+    pricing_date = datetime.today()
+    maturity_date = pricing_date + timedelta(days=365)
+
+    # --- Paramètres marché ---
+    S0 = 100
+    r = 0.05
+    sigma = 0.2
+    div = 0.0
+    K = 100
+
+    market = Market(S0, r, sigma, div, div_type="continuous")
+
+    # --- Liste de stratégies à tester ---
+    strategies = [
+        BearCallSpread(strike_sell=95, strike_buy=105, maturity=maturity_date),
+        BullCallSpread(strike_buy=95, strike_sell=105, maturity=maturity_date),
+        ButterflySpread(strike_low=90, strike_mid=100, strike_high=110, maturity=maturity_date),
+        Straddle(strike=100, maturity=maturity_date),
+        Strap(strike=100, maturity=maturity_date),
+        Strip(strike=100, maturity=maturity_date),
+        Strangle(lower_strike=90, upper_strike=110, maturity=maturity_date),
+        Condor(strike1=90, strike2=95, strike3=105, strike4=110, maturity=maturity_date),
+        PutCallSpread(strike=100, maturity=maturity_date),
+    ]
+
+    # --- Paramètres Modèle ---
+    n_paths = 100000
+    n_steps = 300
+    seed = 2
+
+    print("\n====== EUROPEAN VANILLA STRATEGIES PRICING ======")
+
+    # --- Pricing des stratégies à caractère européen ---
+    for strat in strategies:
+        print(f"\n=== {strat.name} ===")
+
+        price = 0
+        prices = []
+
+        for leg, quantity in strat.get_legs():
+            engine = MonteCarloEngine(
+                market=market,
+                option=leg,
+                pricing_date=pricing_date,
+                n_paths=n_paths,
+                n_steps=n_steps,
+                seed=seed
+            )
+
+            p = engine.price(type="MC")
+            ci_low, ci_up = engine.price_confidence_interval(type="MC")
+
+            prices.append((leg.__class__.__name__, p, ci_low, ci_up, quantity))
+            price += quantity * p
+
+        for leg_name, p, low, high, q in prices:
+            print(f"{leg_name:>15} | Quantité: {q:+} | Prix: {p:.4f} | CI95%: [{low:.4f}, {high:.4f}]")
+
+        print(f"→ Prix total stratégie : {price:.4f}")
+
+    # --- Pricing des stratégies américaines ---
+    print("\n====== AMERICAN VANILLA STRATEGIES PRICING ======")
+
+    for strat in strategies:
+        print(f"\n=== {strat.name} (American) ===")
+
+        price = 0
+        prices = []
+
+        for leg, quantity in strat.get_legs():
+            # Assure que chaque leg est bien en "american"
+            leg.exercise = "american"
+
+            engine = MonteCarloEngine(
+                market=market,
+                option=leg,
+                pricing_date=pricing_date,
+                n_paths=n_paths,
+                n_steps=n_steps,
+                seed=seed
+            )
+
+            try:
+                p = engine.price(type="Longstaff")
+                ci_low, ci_up = engine.price_confidence_interval(type="Longstaff")
+
+                prices.append((leg.__class__.__name__, p, ci_low, ci_up, quantity))
+                price += quantity * p
+
+            except NotImplementedError as e:
+                print(f"NotImplementedError for {leg.__class__.__name__}: {e}")
+
+        for leg_name, p, low, high, q in prices:
+            print(f"{leg_name:>15} | Quantité: {q:+} | Prix: {p:.4f} | CI95%: [{low:.4f}, {high:.4f}]")
+
+        print(f"→ Prix total stratégie (Américaine) : {price:.4f}")

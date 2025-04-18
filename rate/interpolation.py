@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.interpolate import interp1d
 
-class TauxInterpolation:
+class RateInterpolation:
     def __init__(self, x, y, kind='linear'):
         """
         Initialise l'interpolateur.
@@ -38,7 +38,7 @@ class TauxInterpolation:
         Effectue une interpolation cubique entre quatre points.
         """
         # Trouver l'intervalle correspondant
-        idx = np.searchsorted(self.x, x_val) - 1
+        idx = np.searchsorted(self.x, x_val)
         idx = np.clip(idx, 1, len(self.x) - 3)
 
         # Extraire les points voisins pour l'interpolation cubique
@@ -58,7 +58,7 @@ class TauxInterpolation:
         # Retourne l'interpolation cubique
         return a0 + a1 * (x_val - x1) + a2 * (x_val - x1) ** 2 + a3 * (x_val - x1) ** 3
 
-    def get_taux(self, x_val):
+    def yield_value(self, x_val):
         """
         Retourne le taux interpolé pour une valeur donnée x_val.
         """
@@ -72,23 +72,8 @@ class TauxInterpolation:
         else:
             raise ValueError("Le type d'interpolation doit être 'linear' ou 'cubic'.")
 
-class TauxInterpolation2:
-    def __init__(self, x, y, kind='linear'):
+    def yield_curve_array(self, maturities):
         """
-        Initialise l'interpolateur.
-
-        :param x: array-like, les maturités (ex: [1, 2, 3, 5])
-        :param y: array-like, les taux correspondants à chaque maturité
-        :param kind: type d'interpolation ('linear' ou 'cubic')
+        Calcule la courbe des taux interpolés pour un tableau d'échéances.
         """
-        if len(x) != len(y):
-            raise ValueError("Les tableaux x et y doivent avoir la même longueur")
-
-        self.kind = kind
-        self.interpolator = interp1d(x, y, kind=kind, fill_value="extrapolate")
-
-    def get_taux(self, x_val):
-        """
-        Retourne le taux interpolé pour une valeur donnée de maturité x_val.
-        """
-        return float(self.interpolator(x_val))
+        return np.array([self.yield_value(t) for t in maturities])

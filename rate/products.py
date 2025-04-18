@@ -3,16 +3,20 @@ import numpy as np
 import pandas as pd
 from curve_utils import make_zc_curve
 
+# Warning : computation methods are theoric, they do not consider specific coupon dates & maturity but float as periods and equal coupon periods
+
 class Bond(ABC):
-    def __init__(self, face_value, maturity):
+    def __init__(self, face_value, maturity, dcc=None):
         """
         Classe abstraite pour les obligations.
 
         :param face_value: Valeur nominale de l'obligation
         :param maturity: Maturité en années
+        :param dcc: Convention de jours (objet DCC)
         """
         self.face_value = face_value
         self.maturity = maturity
+        self.dcc = dcc
 
     @abstractmethod
     def build_cashflows_as_zc(self, zc_curve):
@@ -21,26 +25,28 @@ class Bond(ABC):
 
     def price(self, zc_curve):
         zc_bonds = self.build_cashflows_as_zc(zc_curve)
-        return sum(z.price() for z in zc_bonds)
+        return sum(z.price(zc_curve) for z in zc_bonds)
 
 class ZeroCouponBond(Bond):
-    def __init__(self, face_value, rate, maturity):
+    def __init__(self, face_value, maturity):
         """
         Obligation zéro coupon.
 
         :param face_value: Valeur nominale (ex: 1000)
-        :param rate: Taux d'intérêt annuel (exprimé en décimal, ex: 0.05 pour 5%)
         :param maturity: Maturité en années
         """
         super().__init__(face_value, maturity)
-        self.rate = rate
+        self.rate = None
 
     def build_cashflows_as_zc(self, zc_curve=None):
         return [self]  # ZC = un seul cashflow
 
     def price(self, zc_curve=None):
         """Calcul du prix d'un zéro coupon par actualisation de la valeur nominale."""
-        return self.face_value * np.exp(-self.rate * self.maturity)
+        r = zc_curve(self.maturity)
+        if not self.rate:
+            self.rate = r
+        return self.face_value * np.exp(-r * self.maturity)
 
 class FixedRateBond(Bond):
     def __init__(self, face_value, coupon_rate, maturity, frequency=1):
@@ -64,11 +70,9 @@ class FixedRateBond(Bond):
 
         for i in range(1, n + 1):
             t = i * dt
-            r = zc_curve(t)
-            cashflows.append(ZeroCouponBond(coupon, r, t))
+            cashflows.append(ZeroCouponBond(coupon, t))
 
-        r_T = zc_curve(self.maturity)
-        cashflows.append(ZeroCouponBond(self.face_value, r_T, self.maturity))
+        cashflows.append(ZeroCouponBond(self.face_value, self.maturity))
         return cashflows
 
 class FloatingRateBond(Bond):
@@ -86,7 +90,7 @@ class FloatingRateBond(Bond):
         """
         super().__init__(face_value, maturity)
         self.margin = margin
-        self.forecasted_rates = forecasted_rates  # list ou callable
+        self.forecasted_rates = forecasted_rates
         self.frequency = frequency
         self.multiplier = multiplier
 
@@ -101,10 +105,10 @@ class FloatingRateBond(Bond):
             coupon_rate = self.multiplier * r_fwd + self.margin
             coupon = self.face_value * coupon_rate / self.frequency
             r = zc_curve(t)
-            cashflows.append(ZeroCouponBond(coupon, r, t))
+            cashflows.append(ZeroCouponBond(coupon, t))
 
         r_T = zc_curve(self.maturity)
-        cashflows.append(ZeroCouponBond(self.face_value, r_T, self.maturity))
+        cashflows.append(ZeroCouponBond(self.face_value, self.maturity))
         return cashflows
 
 class ForwardRate:
@@ -173,11 +177,25 @@ class InterestRateSwap:
     def _compute_par_rate(self, zc_curve):
         dt = 1 / self.frequency
         n = int(self.maturity * self.frequency)
+
+        # Dates de paiement
         t_i = np.array([i * dt for i in range(1, n + 1)])
-        zc = np.exp(-zc_curve(t_i) * t_i)
-        numerateur = 1 - zc[-1]
-        denominateur = dt * np.sum(zc)
-        return numerateur / denominateur
+
+        # ZC curve aux dates t_i
+        zc = np.exp(-np.vectorize(zc_curve)(t_i) * t_i)
+
+        # Actualisation du nominal à maturité
+        P_T = np.exp(-zc_curve(self.maturity) * self.maturity)
+
+        # Valeur actuelle d’une annuité (jambe fixe)
+        annuity = dt * np.sum(zc)
+
+        # Valeur actuelle de la jambe flottante : notional * (1 - P(T))
+        pv_float = self.notional * (1 - P_T)
+
+        # Taux fixe qui égalise les deux jambes
+        fixed_rate = pv_float / (self.notional * annuity)
+        return fixed_rate
 
     def mtm(self, zc_curve):
         """
@@ -207,14 +225,14 @@ if __name__ == "__main__":
     # Chargement des données
     data = pd.read_excel("../data_taux/RateCurve_temp.xlsx")
     maturities = data['Matu'].values
-    rates = data['Rate'].values
+    rates = data['Rate'].values / 100
 
     # Création de la courbe avec curve_utils (ex: interpolation ici)
     zc_curve = make_zc_curve("interpolation", maturities, rates, kind="cubic")
 
     # Obligation zéro coupon
-    zcb = ZeroCouponBond(face_value=1000, rate=0.05, maturity=5)
-    print("Prix du Zero Coupon Bond :", round(zcb.price(), 2))
+    zcb = ZeroCouponBond(face_value=1000, maturity=5)
+    print("Prix du Zero Coupon Bond :", round(zcb.price(zc_curve), 2))
 
     # Obligation à taux fixe
     frb = FixedRateBond(face_value=1000, coupon_rate=0.06, maturity=5, frequency=1)
@@ -222,7 +240,6 @@ if __name__ == "__main__":
 
     # Obligation à taux variable
     forecasted_rates = [0.02, 0.021, 0.0205, 0.022, 0.0215]
-    forecasted_rates = [0] + forecasted_rates  # Décalage index
     varb = FloatingRateBond(face_value=1000, margin=0.002, maturity=5,
                             forecasted_rates=forecasted_rates, frequency=1)
     print("Prix du Floating Rate Bond :", round(varb.price(zc_curve), 2))

@@ -43,11 +43,10 @@ class BlackScholesPricer:
 
     def _compute_d1_d2(self):
         """ Calcule d1 et d2 pour la formule de Black-Scholes. """
-        if self.d1 is None and self.d2 is None:
-            sigma_sqrt_T = self.market.sigma * np.sqrt(self.T)
-            self.d1 = (np.log(self.S0 / self.option.K) +
-                  (self.market.r - self.q + 0.5 * self.market.sigma ** 2) * self.T) / sigma_sqrt_T
-            self.d2 = self.d1 - sigma_sqrt_T
+        sigma_sqrt_T = self.market.sigma * np.sqrt(self.T)
+        self.d1 = (np.log(self.S0 / self.option.K) +
+              (self.market.r - self.q + 0.5 * self.market.sigma ** 2) * self.T) / sigma_sqrt_T
+        self.d2 = self.d1 - sigma_sqrt_T
 
     def price(self):
         """ Calcul du prix de l'option via Black-Scholes. """

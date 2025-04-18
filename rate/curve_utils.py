@@ -1,4 +1,4 @@
-from interpolation import TauxInterpolation
+from interpolation import RateInterpolation
 from nelson_siegel import NelsonSiegelModel
 from svensson import SvenssonModel
 from vasicek_v2 import VasicekModel
@@ -21,8 +21,8 @@ def make_zc_curve(method, *args, kind='linear', **kwargs):
         if len(args) != 2:
             raise ValueError("Interpolation requiert (maturities, observed_yields)")
         maturities, observed_yields = args
-        interp = TauxInterpolation(maturities, observed_yields, kind=kind)
-        return lambda t: interp.get_taux(t)
+        interp = RateInterpolation(maturities, observed_yields, kind=kind)
+        return lambda t: interp.yield_value(t)
 
     elif method == 'nelson-siegel':
         # args = (maturities, observed_yields, initial_guess)
@@ -31,7 +31,7 @@ def make_zc_curve(method, *args, kind='linear', **kwargs):
         maturities, observed_yields, initial_guess = args
         model = NelsonSiegelModel(*initial_guess)
         model.calibrate(maturities, observed_yields, initial_guess)
-        return lambda t: model.yield_curve(t)
+        return lambda t: model.yield_value(t)
 
     elif method == 'svensson':
         # args = (maturities, observed_yields, initial_guess)
@@ -39,24 +39,23 @@ def make_zc_curve(method, *args, kind='linear', **kwargs):
             raise ValueError("Svensson requiert (maturities, observed_yields, initial_guess)")
         maturities, observed_yields, initial_guess = args
         model = SvenssonModel(*initial_guess, maturities, observed_yields, initial_guess)
-        return lambda t: model.yield_curve(t)
+        return lambda t: model.yield_value(t)
 
     elif method == 'vasicek':
         # kwargs attendus : soit from_data, soit a, b, sigma, r0 (optionnel)
         if "from_data" in kwargs:
             model = VasicekModel.calibrate_from_file(kwargs["from_data"])
         else:
-            required_keys = ['a', 'b', 'sigma']
+            required_keys = ['observed_yields', 'dt', 'n_steps']
             for key in required_keys:
                 if key not in kwargs:
                     raise ValueError(f"Paramètre requis manquant pour Vasicek : {key}")
-            model = VasicekModel(
-                a=kwargs["a"],
-                b=kwargs["b"],
-                sigma=kwargs["sigma"],
-                r0=kwargs.get("r0", 0.01),
+            model = VasicekModel.calibrate(
+                observed_yields=kwargs["observed_yields"],
+                dt=kwargs["dt"],
+                n_steps=kwargs["n_steps"]
             )
-        return lambda t: model.zero_coupon_rate(t)
+        return lambda t: model.yield_value(t)
 
     else:
         raise ValueError(f"Méthode inconnue : {method}")
@@ -68,7 +67,11 @@ if __name__ == "__main__":
     # Courbe fictive pour les tests
     maturities = np.array([1, 2, 3, 5, 7, 10])
     rates = np.array([0.015, 0.017, 0.018, 0.020, 0.022, 0.025])
-    t_values = np.linspace(0.5, 10, 100)
+    t_values = np.linspace(0.1, 10, 100)
+
+    # Définition du pas de temps et du nombre de pas
+    dt = 1
+    n_steps = 10
 
     # Initial guesses (exemples arbitraires)
     ns_guess = [0.02, -0.01, 0.01, 2.0]
@@ -78,7 +81,12 @@ if __name__ == "__main__":
         "Interpolation (cubic)": make_zc_curve("interpolation", maturities, rates, kind="refined cubic"),
         "Nelson-Siegel": make_zc_curve("nelson-siegel", maturities, rates, ns_guess),
         "Svensson": make_zc_curve("svensson", maturities, rates, sv_guess),
-        "Vasicek": make_zc_curve("vasicek", a=0.1, b=0.03, sigma=0.01, r0=0.02),
+                "Vasicek": make_zc_curve(
+            "vasicek",
+            observed_yields=rates,
+            dt=dt,
+            n_steps=n_steps
+        )
         # "Vasicek (from file)": make_zc_curve("vasicek", from_data="chemin/vers/fichier.csv")  # à tester si fichier réel
     }
 

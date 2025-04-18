@@ -2,14 +2,14 @@ import datetime
 import numpy as np
 
 class DayCountConvention:
-    def __init__(self, convention="Actual/360"):
+    def __init__(self, convention="Actual/365"):
         """
         Initialise la convention de décompte de jours.
 
         :param convention: chaîne de caractères indiquant la convention ("Actual/360", "Actual/365", "30/360", "Actual/Actual")
         """
         self.convention = convention.lower()
-        self.days_in_year = float(convention.split("/")[0])
+        self.days_in_year = float(convention.split("/")[1])
 
     def year_fraction(self, start_date, end_date):
         """

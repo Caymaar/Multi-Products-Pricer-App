@@ -2,9 +2,9 @@ import pandas as pd
 import numpy as np
 from scipy.optimize import minimize
 import plotly.graph_objects as go
-from abstract_taux import AbstractYieldCurve
+from abstract_taux import AbstractRateModel
 
-class NelsonSiegelModel(AbstractYieldCurve):
+class NelsonSiegelModel(AbstractRateModel):
     def __init__(self, beta0, beta1, beta2, lambda1):
         """
         Initialisation du modèle Nelson-Siegel.
@@ -18,9 +18,9 @@ class NelsonSiegelModel(AbstractYieldCurve):
         self.beta2 = beta2
         self.lambda1 = lambda1
 
-    def yield_curve(self, t):
+    def yield_value(self, t):
         """
-        Calcule le taux pour une échéance donnée tau.
+        Calcule le taux pour une échéance donnée t.
         """
         # Gestion de la division par zéro pour t == 0
         if t == 0:
@@ -30,23 +30,18 @@ class NelsonSiegelModel(AbstractYieldCurve):
         term2 = term1 - np.exp(-factor) - np.exp(-factor)
         return self.beta0 + self.beta1 * term1 + self.beta2 * term2
 
-    def yield_curve_array(self, maturities):
-        """
-        Calcule la courbe des taux pour un tableau d'échéances.
-        """
-        return np.array([self.yield_curve(t) for t in maturities])
-
     def calibrate(self, maturities, observed_yields, initial_guess):
         """
-        Calibre les paramètres (beta0, beta1, beta2, lambda1) du modèle en minimisant
-        l'erreur quadratique entre les rendements observés et la courbe théorique,
-        en utilisant l'algorithme Nelder-Mead.
+        Calibre les paramètres du modèle Nelson-Siegel.
 
-        :param maturities: tableau des échéances
-        :param observed_yields: tableau des rendements observés
-        :param initial_guess: estimation initiale pour [beta0, beta1, beta2, lambda1]
-        :return: les paramètres calibrés
+        :param maturities: Tableau des échéances (obligatoire pour ce modèle)
+        :param observed_yields: Tableau des rendements observés
+        :param initial_guess: Estimation initiale des paramètres [beta0, beta1, beta2, lambda1]
+        :return: Les paramètres calibrés
         """
+        if maturities is None or observed_yields is None or initial_guess is None:
+            raise ValueError(
+                "Pour Nelson-Siegel, 'maturities', 'observed_yields' et 'initial_guess' doivent être fournis.")
 
         # Définition de la fonction objectif (somme des carrés des erreurs)
         def objective(params):

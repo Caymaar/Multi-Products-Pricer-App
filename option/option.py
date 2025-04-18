@@ -2,7 +2,7 @@ import numpy as np
 from abc import ABC, abstractmethod
 
 # Warning note :
-# Vanilla & digits options, both american or european will be priced by any available pricing method (Trinomial or MC)
+# Vanilla & digits options, both american or european style will be priced by any available pricing method (Trinomial or MC)
 # However, Barrier option will be priced by Monte Carlo for european & Longstaff for American, not possible for Trinomial being recombined while adjusting probas and structure
 
 # ---------------- Base Option Class ----------------
@@ -20,6 +20,13 @@ class Option(ABC):
         """
         raise NotImplementedError("La méthode intrinsic_value doit être implémentée dans les sous-classes.")
 
+    def _terminal_price(self, S):
+        # Si S est un scalaire (float ou int), on retourne S directement (utile notamment pour le pricing trinomial par noeud)
+        if np.isscalar(S):
+            return S
+        # Sinon, on suppose que S est une matrice, on récupère la dernière colonne
+        return S[:, -1]
+
 
 # ---------------- Call and Put Option Classes ----------------
 class Call(Option):
@@ -28,7 +35,8 @@ class Call(Option):
 
     def intrinsic_value(self, S):
         """ Payoff d'un Call à la période observée. """
-        return np.maximum(S[:, -1] - self.K, 0)
+        S_T = self._terminal_price(S)
+        return np.maximum(S_T - self.K, 0)
 
 
 class Put(Option):
@@ -37,7 +45,8 @@ class Put(Option):
 
     def intrinsic_value(self, S):
         """ Payoff d'un Put à la période observée. """
-        return np.maximum(self.K - S[:, -1], 0)
+        S_T = self._terminal_price(S)
+        return np.maximum(self.K - S_T, 0)
 
 
 # ---------------- Digital Option Classes ----------------
@@ -59,7 +68,8 @@ class DigitalCall(Call):
         Si le prix terminal S > K, renvoie payoff_amount, sinon 0.
         Utilise np.where pour une compatibilité vectorielle.
         """
-        return np.where(S[:, -1] > self.K, self.payoff_amount, 0)
+        S_T = self._terminal_price(S)
+        return np.where(S_T > self.K, self.payoff_amount, 0)
 
 
 class DigitalPut(Put):
@@ -79,7 +89,8 @@ class DigitalPut(Put):
         """
         Si le prix terminal S < K, renvoie payoff_amount, sinon 0.
         """
-        return np.where(S[:, -1] < self.K, self.payoff_amount, 0)
+        S_T = self._terminal_price(S)
+        return np.where(S_T < self.K, self.payoff_amount, 0)
 
 
 # ---------------- Barrier Option Classes -----------------------------

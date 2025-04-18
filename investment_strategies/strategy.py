@@ -11,14 +11,14 @@ class Strategy(ABC):
     @abstractmethod
     def get_legs(self):
         """
-        Retourne la liste des tuples (option, poids) qui composent la stratégie.
+        Retourne la liste des tuples (actif, poids) qui composent la stratégie.
         Exemple : [(option1, -1), (option2, 1)]
         """
         pass
 
     def price(self, engine):
         """
-        Calcule le prix de la stratégie en agrégeant le prix de chaque option pondéré par son poids.
+        Calcule le prix de la stratégie en agrégeant le prix de chaque actif pondéré par son poids.
         """
         total_price = 0
         for option, weight in self.get_legs():

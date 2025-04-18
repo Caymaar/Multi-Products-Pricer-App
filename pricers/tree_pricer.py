@@ -236,7 +236,7 @@ class TreeModel(Engine):
         if self.option.exercise == "european":
             return average
         elif self.option.exercise == "american":
-            return max(average, self.option.payoff(current_node.S))
+            return max(average, self.option.intrinsic_value(current_node.S))
         else:
             raise ValueError("Execution type wrongly specified. Please only use 'European' or 'American'")
 
@@ -246,15 +246,15 @@ class TreeModel(Engine):
 
         if self.tree_price is None:
             trunc_node = self.get_trunc_node(self.n_steps)
-            trunc_node.NFV = self.option.payoff(trunc_node.S)
+            trunc_node.NFV = self.option.intrinsic_value(trunc_node.S)
 
             up_node, down_node = trunc_node, trunc_node
             while up_node.bro_up is not None:
                 up_node = up_node.bro_up
-                up_node.NFV = self.option.payoff(up_node.S)
+                up_node.NFV = self.option.intrinsic_value(up_node.S)
             while down_node.bro_down is not None:
                 down_node = down_node.bro_down
-                down_node.NFV = self.option.payoff(down_node.S)
+                down_node.NFV = self.option.intrinsic_value(down_node.S)
 
             step = self.n_steps
             # Loop over parent Nodes

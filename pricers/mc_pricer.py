@@ -4,6 +4,7 @@ from pricers.pricing_model import Engine
 from pricers.regression import Regression
 from stochastic_process.gbm_process import GBMProcess
 
+
 # ---------------- Classe MCModel ----------------
 class MonteCarloEngine(Engine):
     def __init__(self, market, option, pricing_date, n_paths, n_steps, seed=None, ex_frontier="Quadratic",compute_antithetic=False):
@@ -14,31 +15,42 @@ class MonteCarloEngine(Engine):
         self.am_payoffs = None
         self.american_price_by_time = None
         self.GBMProcess = GBMProcess(
-            self.market, self.dt, self.n_paths, self.n_steps, self.t_div, compute_antithetic, seed)
+            market=self.market, dt=self.dt, n_paths=self.n_paths, n_steps=self.n_steps, t_div=self.t_div, compute_antithetic=compute_antithetic, seed=seed)
 
     def _price_american_lsm(self, paths, analysis=False):
         global price_by_time
 
-        CF = self.option.intrinsic_value(paths) # Valeur du payoff à l'échéance
+        # Payoff final brut
+        CF = self.option.intrinsic_value(paths)
 
+        # --- Analyse du pricing backward dans LSM ---
         if analysis:
             price_by_time = []
             price_by_time.append(CF.mean() * np.exp(-self.market.r * self.T))
 
-        for t in range(self.n_steps - 2, -1, -1):
+        # --- Backward induction ---
+        for t in range(self.n_steps - 1, 0, -1):
+            CF *= self.df  # actualisation
 
-            CF *= self.df # Actualisation en un seul calcul
-            immediate = self.option.intrinsic_value(paths[:,:t+1])
-            in_money = immediate > 0  # Mask des options ITM
+            # Valeur immédiate
+            immediate = self.option.intrinsic_value(paths[:, :t + 1])
 
-            if np.any(in_money):  # Vérifie si au moins une option est ITM
-                cont_val = Regression.fit(self.reg_type, paths[in_money, t], CF[in_money])
+            in_money = (immediate > 0)
+
+            if np.any(in_money):
+                X = paths[:, t][in_money]
+                Y = CF[in_money]
+
+                cont_val = Regression.fit(self.reg_type, X, Y)
                 exercise = immediate[in_money] >= cont_val
-                CF[in_money] = np.where(exercise, immediate[in_money], CF[in_money])
 
-                if analysis:
-                    price_by_time.append(CF.mean() * np.exp(-self.market.r * (t + 1) * self.dt))
+                # Mise à jour des cashflows
+                CF[in_money] = np.where(exercise, immediate[in_money], Y)
 
+            if analysis:
+                price_by_time.append(CF.mean() * np.exp(-self.market.r * (t) * self.dt))
+
+        # Stocke le résultat final
         self.am_payoffs = CF
 
         if analysis:
@@ -60,7 +72,7 @@ class MonteCarloEngine(Engine):
 
     def _discounted_eu_payoffs(self, paths):
         """Calcule les payoffs actualisés pour un pricing européen."""
-        payoffs = self.option.payoff(paths[:, -1])  # Payoff à maturité
+        payoffs = self.option.intrinsic_value(paths)  # Payoff à maturité
         return np.exp(-self.market.r * self.T) * payoffs # Actualisation
       
     def get_variance(self, type="MC"):
@@ -113,3 +125,20 @@ class MonteCarloEngine(Engine):
 
     def american_price(self):
         return self._price_american_lsm(self.GBMProcess.simulate())
+
+    def _recreate_model(self, **kwargs):
+        """
+        Recrée une instance du modèle avec des paramètres mis à jour.
+        :param kwargs: Les paramètres à mettre à jour dans le nouveau modèle.
+        :return: Une nouvelle instance de MonteCarloEngine.
+        """
+        new_params = {
+            "market": self.market.copy(),  # Copie du marché actuel
+            "option": self.option,
+            "pricing_date": self.pricing_date,
+            "n_paths": self.n_paths,
+            "n_steps": self.n_steps,
+            "seed": self.GBMProcess.brownian.seed if hasattr(self.GBMProcess.brownian, 'seed') else None  # Copie la graine si disponible
+        }
+        new_params.update(kwargs)  # Mise à jour avec les paramètres fournis
+        return MonteCarloEngine(**new_params)
