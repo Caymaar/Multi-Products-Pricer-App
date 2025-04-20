@@ -7,21 +7,23 @@ from stochastic_process.gbm_process import GBMProcess
 
 # ---------------- Classe MCModel ----------------
 class MonteCarloEngine(Engine):
-    def __init__(self, market, option, pricing_date, n_paths, n_steps, seed=None, ex_frontier="Quadratic",compute_antithetic=False):
-        super().__init__(market, option, pricing_date, n_steps)
+    def __init__(self, market, options, pricing_date, n_paths, n_steps, seed=None, ex_frontier="Quadratic",compute_antithetic=False):
+        super().__init__(market, options, pricing_date, n_steps)
         self.n_paths = n_paths
         self.reg_type = ex_frontier
         self.eu_payoffs = None
         self.am_payoffs = None
         self.american_price_by_time = None
-        self.GBMProcess = GBMProcess(
-            market=self.market, dt=self.dt, n_paths=self.n_paths, n_steps=self.n_steps, t_div=self.t_div, compute_antithetic=compute_antithetic, seed=seed)
+
+        # self.GBMProcess = {}
+        self.GBMProcess = GBMProcess(market=self.market, dt=self.dt, n_paths=self.n_paths, n_steps=self.n_steps,
+                                     t_div=self.t_div, compute_antithetic=compute_antithetic, seed=seed)
 
     def _price_american_lsm(self, paths, analysis=False):
         global price_by_time
 
         # Payoff final brut
-        CF = self.option.intrinsic_value(paths)
+        CF = [option.intrinsic_value(paths) for option in self.options if option.exercise == "american"]
 
         # --- Analyse du pricing backward dans LSM ---
         if analysis:

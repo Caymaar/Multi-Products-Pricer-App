@@ -1,5 +1,6 @@
 import numpy as np
 from abc import ABC, abstractmethod
+from typing import List
 
 # Warning note :
 # Vanilla & digits options, both american or european style will be priced by any available pricing method (Trinomial or MC)
@@ -26,6 +27,26 @@ class Option(ABC):
             return S
         # Sinon, on suppose que S est une matrice, on récupère la dernière colonne
         return S[:, -1]
+
+# ---------------- Option Portfolio Class ----------------
+class OptionPortfolio:
+    def __init__(self, options : List[Option]):
+        """
+        Initialise un portefeuille d'options.
+        :param options: Liste d'options à inclure dans le portefeuille.
+        """
+        self.options = options
+
+    def intrinsic_value(self, S_slices):
+        """
+        Calcule la valeur intrinsèque du portefeuille d'options.
+        :param S_slices: Matrice des prix simulés pour chaque option.
+        :return: Valeur totale du portefeuille d'options.
+        """
+        total_value = 0
+        for option, S in zip(self.options, S_slices):
+            total_value += option.intrinsic_value(S)
+        return total_value
 
 
 # ---------------- Call and Put Option Classes ----------------

@@ -130,7 +130,6 @@ class GBMProcess(AbstractStochasticProcess):
             paths[:, t + 1] = paths[:, t] * increments
         return paths
 
-
     def simulate2(self):
         """
         Génère des trajectoires GBM avec une méthode vectorielle (sans boucles).
