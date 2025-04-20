@@ -63,17 +63,31 @@ class FixedRateBond(Bond):
         self.frequency = frequency
 
     def build_cashflows_as_zc(self, zc_curve):
-        dt = 1 / self.frequency
-        n = int(self.maturity * self.frequency)
-        coupon = self.face_value * self.coupon_rate / self.frequency
+        """
+        Gère un premier coupon court (stub) si la maturité n’est pas un multiple exact de 1/freq.
+        """
+        dt_reg = 1 / self.frequency
+        n = int(np.floor(self.maturity / dt_reg))  # nombre de périodes régulières complètes
+        stub = self.maturity - n * dt_reg  # durée du premier coupon
+
         cashflows = []
+        # 1) Premier coupon (stub)
+        if stub > 1e-12:  # si stub non nul
+            amount_stub = self.face_value * self.coupon_rate * stub
+            cashflows.append(ZeroCouponBond(amount_stub, stub))
 
-        for i in range(1, n + 1):
-            t = i * dt
-            cashflows.append(ZeroCouponBond(coupon, t))
+        # 2) Coupons réguliers + principal à la maturité
+        for j in range(1, n + 1):
+            t_j = stub + j * dt_reg
+            # montant du coupon sur dt_reg
+            coupon_amt = self.face_value * self.coupon_rate * dt_reg
+            # si c'est le dernier paiement, on ajoute le nominal
+            if j == n:
+                coupon_amt += self.face_value
+            cashflows.append(ZeroCouponBond(coupon_amt, t_j))
 
-        cashflows.append(ZeroCouponBond(self.face_value, self.maturity))
         return cashflows
+
 
 class FloatingRateBond(Bond):
     def __init__(self, face_value, margin, maturity, forecasted_rates, frequency=1, multiplier=1.0):
@@ -95,21 +109,39 @@ class FloatingRateBond(Bond):
         self.multiplier = multiplier
 
     def build_cashflows_as_zc(self, zc_curve):
-        dt = 1 / self.frequency
-        n = int(self.maturity * self.frequency)
+        dt_reg = 1 / self.frequency
+        # Nombre de périodes régulières complètes
+        n = int(np.floor(self.maturity / dt_reg))
+        # Stub (premier coupon plus court)
+        stub = self.maturity - n * dt_reg
+
         cashflows = []
 
-        for i in range(1, n + 1):
-            t = i * dt
-            r_fwd = self.forecasted_rates[i-1]
-            coupon_rate = self.multiplier * r_fwd + self.margin
-            coupon = self.face_value * coupon_rate / self.frequency
-            r = zc_curve(t)
-            cashflows.append(ZeroCouponBond(coupon, t))
+        # 1) Premier coupon (stub) si stub > 0
+        if stub > 1e-12:
+            # On utilise le 1er taux forecasté pour la période stub
+            r_fwd = self.forecasted_rates[0]
+            coupon_stub = self.face_value * (self.multiplier * r_fwd + self.margin) * stub
+            cashflows.append(ZeroCouponBond(coupon_stub, stub))
 
-        r_T = zc_curve(self.maturity)
-        cashflows.append(ZeroCouponBond(self.face_value, self.maturity))
+        # 2) Coupons réguliers + principal
+        for j in range(1, n + 1):
+            # Date du j‑ème paiement = stub + j*dt_reg
+            t_j = stub + j * dt_reg
+
+            # On prend le j‑ème taux forecasté (ou le dernier si on dépasse)
+            idx_rate = min(j, len(self.forecasted_rates) - 1)
+            r_fwd_j = self.forecasted_rates[idx_rate]
+            coupon_amt = self.face_value * (self.multiplier * r_fwd_j + self.margin) * dt_reg
+
+            # Si c'est le dernier paiement, on ajoute le nominal
+            if j == n:
+                coupon_amt += self.face_value
+
+            cashflows.append(ZeroCouponBond(coupon_amt, t_j))
+
         return cashflows
+
 
 class ForwardRate:
     def __init__(self, start: float, end: float):

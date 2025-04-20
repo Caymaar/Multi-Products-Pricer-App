@@ -1,0 +1,18 @@
+[project]
+name = "multi-products-pricer-app"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "ipykernel>=6.29.5",
+    "matplotlib>=3.10.1",
+    "nbformat>=5.10.4",
+    "notebook>=7.3.3",
+    "numpy>=2.2.4",
+    "openpyxl>=3.1.5",
+    "pandas>=2.2.3",
+    "plotly>=6.0.1",
+    "scipy>=1.15.2",
+    "statsmodels>=0.14.4",
+]
