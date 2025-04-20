@@ -12,6 +12,7 @@ class Option(ABC):
         self.K = K  # Strike price
         self.T = maturity  # Time to maturity
         self.exercise = exercise.lower()  # "european", "american", etc.
+        self.name = None
 
     @abstractmethod
     def intrinsic_value(self, S):
@@ -30,7 +31,7 @@ class Option(ABC):
 
 # ---------------- Option Portfolio Class ----------------
 class OptionPortfolio:
-    def __init__(self, options : List[Option]):
+    def __init__(self, options : Option | List[Option]):
         """
         Initialise un portefeuille d'options.
         :param options: Liste d'options à inclure dans le portefeuille.
@@ -53,6 +54,7 @@ class OptionPortfolio:
 class Call(Option):
     def __init__(self, K, maturity, exercise="european"):
         super().__init__(K, maturity, exercise)
+        self.name = f'{self.__class__.__name__}, K={self.K}, T={self.T.date()}, exercise={self.exercise}'
 
     def intrinsic_value(self, S):
         """ Payoff d'un Call à la période observée. """
@@ -63,6 +65,7 @@ class Call(Option):
 class Put(Option):
     def __init__(self, K, maturity, exercise="european"):
         super().__init__(K, maturity, exercise)
+        self.name = f'{self.__class__.__name__}, K={self.K}, T={self.T.date()}, exercise={self.exercise}'
 
     def intrinsic_value(self, S):
         """ Payoff d'un Put à la période observée. """
@@ -134,6 +137,7 @@ class BarrierOption(Option):
         self.direction = direction  # "up" ou "down"
         self.knock_type = knock_type  # "in" ou "out"
         self.rebate = rebate
+        self.name = f'{self.__class__.__name__}, K={self.K}, T={self.T.date()}, exercise={self.exercise}'
 
     def is_barrier_triggered(self, S):
         """

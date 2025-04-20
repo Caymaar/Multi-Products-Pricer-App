@@ -1,23 +1,24 @@
 from abc import ABC
 from market.market import Market
-from option.option import Option, OptionPortfolio
-from pricers.bs_pricer import BlackScholesPricer
+from option.option import OptionPortfolio
+# from pricers.bs_pricer import BlackScholesPricer
 import numpy as np
+import datetime
 
 # ---------------- Model Abstract Class ----------------
 class Engine(ABC):
-    def __init__(self, market: Market, options: OptionPortfolio, pricing_date, n_steps: list):
+    def __init__(self, market: Market, option_ptf: OptionPortfolio, pricing_date: datetime, n_steps: int):
         self.market = market
         # self._option = option
-        self.options = options
+        self.options = option_ptf.options
         self.pricing_date = pricing_date
         self.n_steps = n_steps
         self.T = self._calculate_T()
-        self.dt = np.array(self.T) / np.array(n_steps)
+        self.dt = np.array(self.T) / n_steps
         self.df = np.exp(-self.market.r * self.dt)
         self.t_div = self._calculate_t_div()
         # Conversion de div_date en indice temporel si dividende discret
-        self.bsm = BlackScholesPricer(self.market, self.option, self.t_div, self.dt, self.T)
+        # self.bsm = BlackScholesPricer(self.market, self.option, self.t_div, self.dt, self.T)
 
     def _calculate_T(self):
         """
