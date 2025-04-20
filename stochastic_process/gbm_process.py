@@ -38,7 +38,7 @@ class GBMProcess(AbstractStochasticProcess):
         #np.cumsum(increments, axis=1, out=increments)
         return np.exp(increments)
 
-    def simulate3(self, batch_size=100):
+    '''def simulate3(self, batch_size=100):
         """
         Simule les trajectoires du sous-jacent avec taux dynamiques et Brownien antithétique.
 
@@ -128,10 +128,9 @@ class GBMProcess(AbstractStochasticProcess):
 
             # Mise à jour des trajectoires du sous-jacent
             paths[:, t + 1] = paths[:, t] * increments
-        return paths
+        return paths'''
 
-
-    def simulate2(self):
+    def simulate(self) -> np.ndarray:
         """
         Génère des trajectoires GBM avec une méthode vectorielle (sans boucles).
         """
