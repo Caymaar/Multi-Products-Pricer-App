@@ -1,7 +1,7 @@
-from interpolation import RateInterpolation
-from nelson_siegel import NelsonSiegelModel
-from svensson import SvenssonModel
-from vasicek_v2 import VasicekModel
+from rate.interpolation import RateInterpolation
+from rate.nelson_siegel import NelsonSiegelModel
+from rate.svensson import SvenssonModel
+from rate.vasicek_v2 import VasicekModel
 
 def make_zc_curve(method, *args, kind='linear', **kwargs):
     """

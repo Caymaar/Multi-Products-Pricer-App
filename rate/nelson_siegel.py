@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from scipy.optimize import minimize
 import plotly.graph_objects as go
-from abstract_taux import AbstractRateModel
+from rate.abstract_taux import AbstractRateModel
 
 class NelsonSiegelModel(AbstractRateModel):
     def __init__(self, beta0, beta1, beta2, lambda1):

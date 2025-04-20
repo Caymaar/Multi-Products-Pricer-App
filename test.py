@@ -1,20 +1,108 @@
 from pricers.mc_pricer import MonteCarloEngine
 from pricers.tree_pricer import TreeModel
+from datetime import datetime, timedelta
+import pandas as pd
 from market.market import Market
+from pricers.structured_pricer import StructuredPricer
 from option.option import (
     Call, Put,
     DigitalCall, DigitalPut,
     UpAndOutCall, DownAndOutPut,
     UpAndInCall, DownAndInPut
 )
-from investment_strategies.vanilla_strategy import (
-    BearCallSpread, BullCallSpread,
-    ButterflySpread, Straddle,
-    Strap, Strip, Strangle, Condor,
-    PutCallSpread
+
+from investment_strategies.structured_strategies import (
+    ReverseConvertible, TwinWin,
+    BonusCertificate, LeverageCertificate,
+    CappedParticipationCertificate,
+    DiscountCertificate, ReverseConvertibleBarrier
 )
 
-from datetime import datetime, timedelta
+# === 1) Chargement de la courbe taux ===
+data = pd.read_excel("./data_taux/RateCurve_temp.xlsx")
+maturities = data['Matu'].values
+yields = data['Rate'].values / 100.0
+
+zc_method = "interpolation"
+zc_args = (maturities, yields)
+
+# === 2) Marché actions pour les options ===
+S0, r_eq, sigma, div = 100, 0.05, 0.2, 0.0
+market_stock = Market(S0, r_eq, sigma, div, div_type="continuous")
+
+# === 3) Dates de pricing et maturité ===
+pricing_date = datetime.today()
+maturity_date = pricing_date + timedelta(days=365)
+
+# === 4) Initialisation du pricer structuré ===
+pricer = StructuredPricer(
+    zc_method=zc_method,
+    zc_args=zc_args,
+    market=market_stock,
+    pricing_date=pricing_date,
+    n_paths=10_000,
+    n_steps=300,
+    seed=42
+)
+
+# === 5) Liste des produits structurés ===
+products = [    TwinWin(
+        K=100,
+        pricing_date=pricing_date,
+        maturity_date=maturity_date,
+        PDO_barrier=80,
+        CUO_barrier=120,
+        notional=1000.0
+    ),
+    ReverseConvertible(
+        K=100,
+        pricing_date=pricing_date,
+        maturity_date=maturity_date,
+        notional=1000.0
+    ),
+    BonusCertificate(
+        K=100,
+        barrier=80,
+        pricing_date=pricing_date,
+        maturity_date=maturity_date,
+        notional=1000.0
+    ),
+    LeverageCertificate(
+        K=100,
+        pricing_date=pricing_date,
+        maturity_date=maturity_date,
+        leverage=3,
+        notional=1000.0
+    ),
+    CappedParticipationCertificate(
+        K=100,
+        cap=120,
+        pricing_date=pricing_date,
+        maturity_date=maturity_date,
+        notional=1000.0
+    ),
+    DiscountCertificate(
+        K=100,
+        pricing_date=pricing_date,
+        maturity_date=maturity_date,
+        notional=1000.0
+    ),
+    ReverseConvertibleBarrier(
+        K=100,
+        barrier=80,
+        pricing_date=pricing_date,
+        maturity_date=maturity_date,
+        notional=1000.0
+    )
+]
+
+# === 6) Pricing et affichage ===
+print("\n====== PRICING DES PRODUITS STRUCTURÉS ======\n")
+for prod in products:
+    price = pricer.price(prod, engine_type="MC")
+    pct = price / prod.notional * 100
+    print(f"{prod.name:35s} → Prix estimé : {pct:6.2f}% du notional")
+
 
 # --- Date de pricing et maturité à +1 an ---
 pricing_date = datetime.today()
@@ -42,7 +130,7 @@ options = [
 ]
 
 # --- Paramètres ---
-n_paths = 100000
+n_paths = 10000
 n_steps = 300
 seed = 2
 

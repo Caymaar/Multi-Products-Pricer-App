@@ -1,5 +1,5 @@
 import numpy as np
-from abstract_taux import AbstractRateModel
+from rate.abstract_taux import AbstractRateModel
 import matplotlib.pyplot as plt
 from stochastic_process.ou_process import OUProcess
 from typing import Union

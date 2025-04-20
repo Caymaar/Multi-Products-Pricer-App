@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from scipy.optimize import minimize
 import plotly.graph_objects as go
-from abstract_taux import AbstractRateModel
+from rate.abstract_taux import AbstractRateModel
 
 class SvenssonModel(AbstractRateModel):
     def __init__(self, beta0, beta1, beta2, beta3, lambda1, lambda2, maturities, observed_yields, initial_guess):

@@ -1,22 +1,22 @@
 from abc import ABC, abstractmethod
 import numpy as np
 import pandas as pd
-from curve_utils import make_zc_curve
+from rate.curve_utils import make_zc_curve
+from market.day_count_convention import DayCountConvention
 
 # Warning : computation methods are theoric, they do not consider specific coupon dates & maturity but float as periods and equal coupon periods
 
 class Bond(ABC):
-    def __init__(self, face_value, maturity, dcc=None):
+    def __init__(self, face_value, maturity, convention_days="Act/365"):
         """
         Classe abstraite pour les obligations.
-
         :param face_value: Valeur nominale de l'obligation
-        :param maturity: Maturité en années
-        :param dcc: Convention de jours (objet DCC)
+        :param maturity: Date de pricing (datetime)
+        :param maturity: Date de maturité (datetime)
+        :param convention_days: Convention de jours (ex: "Act/365")
         """
         self.face_value = face_value
-        self.maturity = maturity
-        self.dcc = dcc
+        self.maturity = maturity # Temps jusqu'à maturité
 
     @abstractmethod
     def build_cashflows_as_zc(self, zc_curve):
@@ -28,14 +28,15 @@ class Bond(ABC):
         return sum(z.price(zc_curve) for z in zc_bonds)
 
 class ZeroCouponBond(Bond):
-    def __init__(self, face_value, maturity):
+    def __init__(self, face_value, maturity, convention_days="Act/365"):
         """
         Obligation zéro coupon.
 
         :param face_value: Valeur nominale (ex: 1000)
         :param maturity: Maturité en années
+        :param convention_days: Convention de jours (ex: "Act/365")
         """
-        super().__init__(face_value, maturity)
+        super().__init__(face_value, maturity, convention_days)
         self.rate = None
 
     def build_cashflows_as_zc(self, zc_curve=None):
@@ -49,16 +50,17 @@ class ZeroCouponBond(Bond):
         return self.face_value * np.exp(-r * self.maturity)
 
 class FixedRateBond(Bond):
-    def __init__(self, face_value, coupon_rate, maturity, frequency=1):
+    def __init__(self, face_value, coupon_rate, maturity, convention_days="Act/365", frequency=1):
         """
         Obligation à taux fixe.
 
         :param face_value: Valeur nominale de l'obligation (ex: 1000)
         :param coupon_rate: Taux de coupon annuel (ex: 0.06 pour 6%)
-        :param maturity: Maturité en années
+        :param maturity: Date de maturité (datetime)
+        :param convention_days: Convention de jours (ex: "Act/365")
         :param frequency: Nombre de paiements par an (ex: 2 pour semestriel)
         """
-        super().__init__(face_value, maturity)
+        super().__init__(face_value, maturity, convention_days)
         self.coupon_rate = coupon_rate
         self.frequency = frequency
 

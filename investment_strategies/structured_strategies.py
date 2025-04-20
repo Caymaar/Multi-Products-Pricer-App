@@ -1,186 +1,171 @@
 from investment_strategies.strategy import Strategy
-from datetime import datetime, timedelta
-import pandas as pd
-from market.market import Market
-from pricers.mc_pricer import MonteCarloEngine
-from rate.curve_utils import make_zc_curve
-from rate.products import FixedRateBond, ZeroCouponBond
-from option.option import Call, Put, DigitalCall, DigitalPut, DownAndOutPut
+from rate.products import ZeroCouponBond
+from option.option import Option, Call, Put, DigitalCall, UpAndOutCall, DownAndOutPut
+from datetime import datetime
+
+class StructuredProduct(Strategy):
+    """
+    Un produit structuré définit uniquement sa mécanique financière :
+      - notional
+      - legs (ZCB et options) et leur sens (+1 achat / -1 vente)
+    Le pricer se charge de dimensionner la quantité d’options sur le résiduel.
+    """
+    def __init__(self, name: str, pricing_date: datetime, maturity_date: datetime, notional: float = 1000.0, convention_days="Actual/365"):
+        super().__init__(name, pricing_date, maturity_date, convention_days)
+        self.notional = notional # a injecter dans strategy directement et faire la modif pour strat vanilles
 
 
-class StructuredStrategy(Strategy):
-    def __init__(self, name):
-        super().__init__(name)
+    def get_legs(self) -> list[tuple[ZeroCouponBond|Option, float]]:
+        """
+        Retourne la liste [(instrument, sign)] où :
+          - instrument est un ZeroCouponBond ou une Option
+          - sign = +1 pour leg long, -1 pour leg short
+        """
+        pass
+
+
+class ReverseConvertible(StructuredProduct):
+    def __init__(self, K: float, pricing_date: datetime, maturity_date: datetime, notional: float = 1000.0, convention_days="Actual/365"):
+        super().__init__("Reverse Convertible", pricing_date, maturity_date, notional, convention_days)
+        self.K = K
 
     def get_legs(self):
-        raise NotImplementedError("get_legs doit être implémentée dans chaque produit structuré.")
+        # ZCB protège 100% du notional, Put vendu sur le résiduel
+        return [
+            (ZeroCouponBond(self.notional, self.ttm), +1.0),
+            (Put(self.K, self.maturity_date), -1.0)
+        ]
 
 
-class ReverseConvertible(StructuredStrategy):
-    def __init__(self, K, maturity, r):
-        """
-        Reverse convertible = ZCB + short put
-        """
-        super().__init__("Reverse Convertible")
-        self.zcb = ZeroCouponBond(face_value=1000, maturity=maturity)
-        self.put = Put(K, maturity)
-
-    def get_legs(self):
-        return [(self.zcb, 1), (self.put, -1)]
-
-
-class TwinWin(StructuredStrategy):
-    def __init__(self, K, maturity):
-        """
-        Twin win = long call + long put (symétrie autour du strike)
-        """
-        super().__init__("Twin Win")
-        self.call = Call(K, maturity)
-        self.put = Put(K, maturity)
+class TwinWin(StructuredProduct):
+    def __init__(self, K: float, pricing_date: datetime, maturity_date: datetime, PDO_barrier: float, CUO_barrier: float, notional: float = 1000.0, convention_days="Actual/365"):
+        super().__init__("Twin Win", pricing_date, maturity_date, notional, convention_days)
+        self.K = K
+        self.PDO_barrier = PDO_barrier
+        self.CUO_barrier = CUO_barrier
 
     def get_legs(self):
-        return [(self.call, 1), (self.put, 1)]
+        # ZCB + straddle: Call + Put longs
+        return [
+            (ZeroCouponBond(self.notional, self.ttm), +1.0),
+            (UpAndOutCall(self.K, self.maturity_date, self.CUO_barrier), +1.0),
+            (DownAndOutPut(self.K, self.maturity_date, self.PDO_barrier), +1.0)
+        ]
 
 
-class BonusCertificate(StructuredStrategy):
-    def __init__(self, K, barrier, maturity, r):
-        """
-        Bonus certificate = ZCB + Call - Put barrière knock-out
-        """
-        super().__init__("Bonus Certificate")
-        self.zcb = ZeroCouponBond(face_value=1000, maturity=maturity)
-        self.call = Call(K, maturity)
-        self.barrier_put = DownAndOutPut(K=K, maturity=maturity, barrier=barrier)
+class BonusCertificate(StructuredProduct):
+    def __init__(self, K: float, barrier: float, pricing_date: datetime,  maturity_date: datetime, notional: float = 1000.0, convention_days="Actual/365"):
+        super().__init__("Bonus Certificate", pricing_date, maturity_date, notional, convention_days)
+        self.K = K
+        self.barrier = barrier
+
 
     def get_legs(self):
-        return [(self.zcb, 1), (self.call, 1), (self.barrier_put, -1)]
+        # ZCB + Call long + Down-and-Out Put short
+        return [
+            (ZeroCouponBond(self.notional, self.ttm), +1.0),
+            (Call(self.K, self.maturity_date), +1.0),
+            (DownAndOutPut(self.K, self.maturity_date, self.barrier), -1.0)
+        ]
 
 
-class LeverageCertificate(StructuredStrategy):
-    def __init__(self, K, maturity, leverage=2):
+class LeverageCertificate(StructuredProduct):
+    def __init__(self,
+                 K: float,
+                 pricing_date: datetime,
+                 maturity_date: datetime,
+                 notional: float = 1000.0,
+                 leverage: float = 2.0,
+                 convention_days="Actual/365"):
         """
-        Certificate offrant une exposition à effet de levier au sous-jacent :
-        - financement partiel via un ZCB
-        - achat d'un call multiplié par le facteur de levier
+        Certificate offrant une exposition à effet de levier :
+        - financement partiel via un ZCB de taille notional/leverage
+        - achat d'un call multiplié par leverage
         """
-        super().__init__("Leverage Certificate")
-        # 1000 de nominal
-        self.zcb = ZeroCouponBond(face_value=1000/leverage, maturity=maturity)
-        self.call = Call(K, maturity)
+        super().__init__("Leverage Certificate", pricing_date, maturity_date, notional, convention_days)
+        self.K = K
         self.leverage = leverage
 
     def get_legs(self):
-        # Le poids du call est égal au facteur de levier
-        return [(self.zcb, 1), (self.call, self.leverage)]
+        # On protège notional/leverage via ZCB, puis on ajoute leverage calls
+        zcb_nominal = self.notional / self.leverage
+        return [
+            (ZeroCouponBond(face_value=zcb_nominal, maturity=self.ttm), +1.0),
+            (Call(self.K, self.maturity_date), self.leverage)
+        ]
 
 
-class CappedParticipationCertificate(StructuredStrategy):
-    def __init__(self, K, cap, maturity):
+class CappedParticipationCertificate(StructuredProduct):
+    def __init__(self,
+                 K: float,
+                 cap: float,
+                 pricing_date: datetime,
+                 maturity_date: datetime,
+                 notional: float = 1000.0,
+                 convention_days="Actual/365"):
         """
-        Certificate offrant participation jusqu'à un plafond cap :
-        - ZCB pour la protection de capital
-        - DigitalCall versant la performance jusqu'au cap
+        Participation limitée (cap) :
+        - ZCB protégeant 100% du notional
+        - Call vanilla pour capter la hausse jusqu’à cap
+        - DigitalCall pour abonder jusqu’à cap-K
         """
-        super().__init__("Capped Participation Certificate")
-        self.zcb = ZeroCouponBond(face_value=1000, maturity=maturity)
-        # paye (min(S_T - K, cap-K)) => digital call + vanilla call strip
-        self.call = Call(K, maturity)
-        self.digital = DigitalCall(K, maturity, "european", payoff=cap - K)
+        super().__init__("Capped Participation Certificate", pricing_date, maturity_date, notional, convention_days)
+        self.K = K
+        self.cap = cap
 
     def get_legs(self):
-        # 1 ZCB + 1 call capte la hausse + 1 digital fixe à la limite
-        return [(self.zcb, 1), (self.call, 1), (self.digital, 1)]
+        # On protège 100% du notional
+        # Puis on expose un call + un digital pour capper la participation
+        return [
+            (ZeroCouponBond(face_value=self.notional, maturity=self.ttm), +1.0),
+            (Call(self.K, self.maturity_date), +1.0),
+            (DigitalCall(self.K, self.maturity_date, "european", payoff=self.cap - self.K), +1.0)
+        ]
 
 
-class DiscountCertificate(StructuredStrategy):
-    def __init__(self, K, maturity):
+class DiscountCertificate(StructuredProduct):
+    def __init__(self,
+                 K: float,
+                 pricing_date: datetime,
+                 maturity_date: datetime,
+                 notional: float = 1000.0,
+                 convention_days="Actual/365"):
         """
-        Discount Certificate: verse le minimum(S_T, K)
-        Payoff = K - Put(K, T)
-        => équivalent à achat d'un ZCB + vente d'un put
+        Discount Certificate : versement de min(S_T, K)
+        → ZCB (face_value = notional) + vente de Put
         """
-        super().__init__("Discount Certificate")
-        self.zcb = ZeroCouponBond(face_value=K, maturity=maturity)
-        self.put = Put(K, maturity)
+        super().__init__("Discount Certificate", pricing_date, maturity_date, notional, convention_days)
+        self.K = K
 
     def get_legs(self):
-        # La valeur finale = K - max(K - S_T, 0) = min(S_T, K)
-        return [(self.zcb, 1), (self.put, -1)]
+        # ZCB protègera notional, on vend 1 put unitaire
+        return [
+            (ZeroCouponBond(face_value=self.notional, maturity=self.ttm), +1.0),
+            (Put(self.K, self.maturity_date), -1.0)
+        ]
 
 
-class ReverseConvertibleBarrier(StructuredStrategy):
-    def __init__(self, K, barrier, maturity):
+class ReverseConvertibleBarrier(StructuredProduct):
+    def __init__(self,
+                 K: float,
+                 barrier: float,
+                    pricing_date: datetime,
+                 maturity_date: datetime,
+                 notional: float = 1000.0,
+                 convention_days="Actual/365"):
         """
-        Reverse Convertible avec barrière knock-out:
-        - ZCB
+        Reverse Convertible KO :
+        - ZCB pour notional
         - short Put
-        - Knock-out Put (DownAndOutPut) pour limiter la perte
+        - Down-and-Out Put pour limiter la perte si barrière touchée
         """
-        super().__init__("Reverse Convertible Barrier")
-        self.zcb = ZeroCouponBond(face_value=1000, maturity=maturity)
-        self.put = Put(K, maturity)
-        self.down_and_out = DownAndOutPut(K=K, maturity=maturity, barrier=barrier)
+        super().__init__("Reverse Convertible Barrier", pricing_date,maturity_date, notional, convention_days)
+        self.K = K
+        self.barrier  = barrier
 
     def get_legs(self):
-        return [(self.zcb, 1), (self.put, -1), (self.down_and_out, 1)]
-
-
-if __name__ == "__main__":
-    # --- Dates ---
-    pricing_date = datetime.today()
-    maturity_years = 1  # horizon pour les produits structurés
-
-    # --- Marché action pour les options ---
-    S0 = 100
-    r_stock = 0.05
-    sigma = 0.2
-    div = 0.0
-    market_stock = Market(S0, r_stock, sigma, div, div_type="continuous")
-
-    # --- Marché taux + courbe ZC ---
-    data = pd.read_excel("../data_taux/RateCurve_temp.xlsx")
-    maturities = data['Matu'].values
-    rates = data['Rate'].values / 100
-    zc_curve = make_zc_curve("interpolation", maturities, rates, kind="cubic")
-    # modèle Vasicek si besoin pour futures extensions
-
-    # --- Paramètres MC ---
-    n_paths = 100000
-    n_steps = 300
-    seed = 42
-
-    # --- Liste de produits structurés ---
-    structured_products = [
-        ReverseConvertible(K=100, maturity=maturity_years, r=r_stock),
-        TwinWin(K=100, maturity=maturity_years),
-        BonusCertificate(K=100, barrier=80, maturity=maturity_years, r=r_stock),
-        LeverageCertificate(K=100, maturity=maturity_years, leverage=3),
-        CappedParticipationCertificate(K=100, cap=120, maturity=maturity_years),
-        DiscountCertificate(K=100, maturity=maturity_years),
-        ReverseConvertibleBarrier(K=100, barrier=80, maturity=maturity_years)
-    ]
-
-    print("\n====== PRICING DES PRODUITS STRUCTURÉS ======\n")
-    for prod in structured_products:
-        total_price = 0.0
-        details = []
-        for leg, qty in prod.get_legs():
-            # obligation
-            if isinstance(leg, (FixedRateBond, ZeroCouponBond)):
-                price_leg = leg.price(zc_curve)
-            else:
-                # option via MC European
-                engine = MonteCarloEngine(
-                    market_stock, leg, pricing_date,
-                    n_paths, n_steps, seed=seed
-                )
-                price_leg = engine.price(type="MC")
-            details.append((leg.__class__.__name__, qty, price_leg))
-            total_price += qty * price_leg
-
-        print(f"=== {prod.name} ===")
-        for name, qty, price in details:
-            print(f"{name:>25} | qty: {qty:+} | price: {price:.4f}")
-        print(f"→ Prix total {prod.name}: {total_price:.4f}\n")
-
-
+        return [
+            (ZeroCouponBond(face_value=self.notional, maturity=self.ttm), +1.0),
+            (Put(self.K, self.maturity_date), -1.0),
+            (DownAndOutPut(self.K, self.maturity_date, barrier=self.barrier), +1.0)
+        ]
