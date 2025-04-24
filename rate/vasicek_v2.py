@@ -49,7 +49,7 @@ class VasicekModel(AbstractRateModel, OUProcess):
         return -np.log(P) / t
 
     @classmethod
-    def calibrate(cls, observed_yields, dt: float, n_steps: int):
+    def calibrate(cls, observed_yields, dt: float, n_steps: int, **kwargs) -> 'VasicekModel':
         """
         Calibre les paramètres du modèle Vasicek.
 
@@ -81,10 +81,11 @@ class VasicekModel(AbstractRateModel, OUProcess):
             r0=r_t[0],
             dt=dt,
             n_steps=n_steps,
+            **kwargs
         )
 
     @staticmethod
-    def calibrate_from_file(source: str = "sofr") -> 'VasicekModel':
+    def calibrate_from_file(source: str = "sofr", **kwargs) -> 'VasicekModel':
         """
         Calibre les paramètres à partir d'un fichier CSV (SOFR, LIBOR...).
         """
@@ -118,7 +119,7 @@ class VasicekModel(AbstractRateModel, OUProcess):
             raise ValueError("Les données fournies ne permettent pas un calcul cohérent des paramètres du modèle.")
 
         # Appel à la méthode de classe pour calibration
-        return VasicekModel.calibrate(observed_yields=r, dt=dt, n_steps=n_steps)
+        return VasicekModel.calibrate(observed_yields=r, dt=dt, n_steps=n_steps, **kwargs)
 
 if __name__ == "__main__":
     model = VasicekModel.calibrate_from_file("sofr")

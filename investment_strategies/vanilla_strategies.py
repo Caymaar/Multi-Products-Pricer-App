@@ -1,8 +1,10 @@
-from investment_strategies.strategy import Strategy
-from option.option import Call, Put
+from investment_strategies.abstract_strategy import Strategy
+from option.option import OptionPortfolio, Call, Put
 from market.market import Market
 from pricers.mc_pricer import MonteCarloEngine
 from datetime import datetime, timedelta
+import matplotlib.pyplot as plt
+import numpy as np
 
 # ---------------- Strategy Class Vanille ----------------
 class BearCallSpread(Strategy):
@@ -191,6 +193,49 @@ class Condor(Strategy):
     def get_legs(self):
         return [(self.call1, 1), (self.call2, -1), (self.call3, -1), (self.call4, 1)]
 
+
+
+def plot_strategy_payoff(strategy, S_range=None):
+    """
+    Trace un joli profil de payoff à maturité pour une stratégie.
+    """
+    if S_range is None:
+        S_range = np.linspace(50, 150, 500)
+
+    payoffs = np.zeros_like(S_range)
+
+    for option, qty in strategy.get_legs():
+        intrinsic_values = np.array([
+            option.intrinsic_value(ST) for ST in S_range
+        ])
+        payoffs += qty * intrinsic_values
+
+    # --- Plotting stylé ---
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.plot(S_range, payoffs, label=strategy.name, color="#2a9d8f", lw=2)
+
+    # --- Zone de gain et perte ---
+    ax.fill_between(S_range, payoffs, 0, where=(payoffs >= 0), interpolate=True, color="#a8dadc", alpha=0.5, label='Gain')
+    ax.fill_between(S_range, payoffs, 0, where=(payoffs < 0), interpolate=True, color="#e76f51", alpha=0.4, label='Perte')
+
+    # --- Lignes et axes ---
+    ax.axhline(0, color="black", lw=1)
+    ax.axvline(100, color="gray", ls="--", lw=1, alpha=0.5)  # prix spot de base
+
+    # --- Titres et style ---
+    ax.set_title(f"Payoff à maturité – {strategy.name}", fontsize=14, weight="bold")
+    ax.set_xlabel("Prix du sous-jacent à maturité (S_T)", fontsize=12)
+    ax.set_ylabel("Payoff net", fontsize=12)
+    ax.grid(True, linestyle=":", alpha=0.7)
+
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+
+    ax.legend(loc="best", frameon=False)
+    plt.tight_layout()
+    plt.show()
+
+
 if __name__ == "__main__":
 
     # --- Date de pricing et maturité à +1 an ---
@@ -226,7 +271,7 @@ if __name__ == "__main__":
 
     print("\n====== EUROPEAN VANILLA STRATEGIES PRICING ======")
 
-    # --- Pricing des stratégies à caractère européen ---
+    #--- Pricing des stratégies à caractère européen ---
     for strat in strategies:
         print(f"\n=== {strat.name} ===")
 
@@ -236,7 +281,7 @@ if __name__ == "__main__":
         for leg, quantity in strat.get_legs():
             engine = MonteCarloEngine(
                 market=market,
-                option=leg,
+                option_ptf=OptionPortfolio([leg]),
                 pricing_date=pricing_date,
                 n_paths=n_paths,
                 n_steps=n_steps,
@@ -246,13 +291,16 @@ if __name__ == "__main__":
             p = engine.price(type="MC")
             ci_low, ci_up = engine.price_confidence_interval(type="MC")
 
-            prices.append((leg.__class__.__name__, p, ci_low, ci_up, quantity))
-            price += quantity * p
+            prices.append((leg.__class__.__name__, p[0], ci_low[0], ci_up[0], quantity))
+            price += quantity * p[0]
 
         for leg_name, p, low, high, q in prices:
             print(f"{leg_name:>15} | Quantité: {q:+} | Prix: {p:.4f} | CI95%: [{low:.4f}, {high:.4f}]")
 
         print(f"→ Prix total stratégie : {price:.4f}")
+
+        # Ajout du plot du payoff
+        #plot_strategy_payoff(strat)
 
     # --- Pricing des stratégies américaines ---
     print("\n====== AMERICAN VANILLA STRATEGIES PRICING ======")
@@ -269,24 +317,20 @@ if __name__ == "__main__":
 
             engine = MonteCarloEngine(
                 market=market,
-                option=leg,
+                option_ptf=OptionPortfolio([leg]),
                 pricing_date=pricing_date,
                 n_paths=n_paths,
                 n_steps=n_steps,
                 seed=seed
             )
 
-            try:
-                p = engine.price(type="Longstaff")
-                ci_low, ci_up = engine.price_confidence_interval(type="Longstaff")
+            p = engine.price(type="Longstaff")
+            ci_low, ci_up = engine.price_confidence_interval(type="MC")
 
-                prices.append((leg.__class__.__name__, p, ci_low, ci_up, quantity))
-                price += quantity * p
-
-            except NotImplementedError as e:
-                print(f"NotImplementedError for {leg.__class__.__name__}: {e}")
+            prices.append((leg.__class__.__name__, p[0], ci_low[0], ci_up[0], quantity))
+            price += quantity * p[0]
 
         for leg_name, p, low, high, q in prices:
             print(f"{leg_name:>15} | Quantité: {q:+} | Prix: {p:.4f} | CI95%: [{low:.4f}, {high:.4f}]")
 
-        print(f"→ Prix total stratégie (Américaine) : {price:.4f}")
+        print(f"→ Prix total stratégie : {price:.4f}")

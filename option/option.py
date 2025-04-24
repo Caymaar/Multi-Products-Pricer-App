@@ -31,7 +31,7 @@ class Option(ABC):
 
 # ---------------- Option Portfolio Class ----------------
 class OptionPortfolio:
-    def __init__(self, options : Option | List[Option]):
+    def __init__(self, options: Option | List[Option]):
         """
         Initialise un portefeuille d'options.
         :param options: Liste d'options à inclure dans le portefeuille.

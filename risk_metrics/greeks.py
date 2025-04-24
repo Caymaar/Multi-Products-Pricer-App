@@ -3,6 +3,7 @@ from pricers.tree_pricer import TreeModel
 from datetime import timedelta
 import copy
 
+
 class GreeksCalculator:
     def __init__(self, model, epsilon=1e-2, type="MC"):
         """
@@ -10,7 +11,7 @@ class GreeksCalculator:
 
         :param model: Instance du modèle.
         :param epsilon: Pas de variation pour les dérivées numériques.
-        :param type: Méthode de pricing ("Longstaff / MC").
+        :param type: Méthode de pricing ("Longstaff / MC / Trinomial").
         """
         self.epsilon = epsilon
         self._type = type
@@ -47,18 +48,17 @@ class GreeksCalculator:
         key_up, key_down = "S0_up", "S0_down"
 
         if isinstance(self._original_model, TreeModel):
-            price_up  = self._get_price(self._original_model,key_up,up=True)
-            price_down = self._get_price(self._original_model,key_down,down=True)
+            price_up = self._get_price(self._original_model, key_up, up=True)
+            price_down = self._get_price(self._original_model, key_down, down=True)
             return (price_up - price_down) / (S0 * self._alpha - S0 / self._alpha)
 
         mc_up = self._recreate_model(market=self._original_model.market.copy(S0=S0 * (1 + self.epsilon)))
         price_up = self._get_price(mc_up, key_up, up=True)
 
         mc_down = self._recreate_model(market=self._original_model.market.copy(S0=S0 * (1 - self.epsilon)))
-        price_down = self._get_price(mc_down, key_down,down=True)
+        price_down = self._get_price(mc_down, key_down, down=True)
 
         return (price_up - price_down) / (2 * S0 * self.epsilon)
-
 
     def gamma(self):
         """Calcul optimisé du Gamma : d²Prix/dS0²"""
@@ -89,8 +89,8 @@ class GreeksCalculator:
         model_up = self._recreate_model(market=self._original_model.market.copy(sigma=sigma + self.epsilon))
         model_down = self._recreate_model(market=self._original_model.market.copy(sigma=sigma - self.epsilon))
 
-        price_up = self._get_price(model_up,"sigma_up")
-        price_down = self._get_price(model_down,"sigma_down")
+        price_up = self._get_price(model_up, "sigma_up")
+        price_down = self._get_price(model_down, "sigma_down")
 
         return (price_up - price_down) / (2 * self.epsilon) / 100
 
@@ -100,7 +100,7 @@ class GreeksCalculator:
 
         model_new = self._recreate_model(pricing_date=pricing_date)
         price_new = self._get_price(model_new, "t_future")
-        price_old = self._get_price(self._original_model,"t_now")
+        price_old = self._get_price(self._original_model, "t_now")
 
         return price_new - price_old
 
@@ -111,10 +111,10 @@ class GreeksCalculator:
         model_up = self._recreate_model(market=self._original_model.market.copy(r=r + self.epsilon))
         model_down = self._recreate_model(market=self._original_model.market.copy(r=r - self.epsilon))
 
-        price_up = self._get_price(model_up,"r_up")
-        price_down = self._get_price(model_down,"r_down")
+        price_up = self._get_price(model_up, "r_up")
+        price_down = self._get_price(model_down, "r_down")
 
         return (price_up - price_down) / (2 * self.epsilon) / 100
 
     def all_greeks(self):
-        return [self.delta(),self.gamma(),self.vega(),self.theta(),self.rho()]
+        return [self.delta(), self.gamma(), self.vega(), self.theta(), self.rho()]

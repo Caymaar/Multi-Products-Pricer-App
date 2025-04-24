@@ -35,7 +35,7 @@ class OUProcess(AbstractStochasticProcess):
         path[0] = self.initial_value  # Valeur initiale du processus
 
         for t in range(1, self.n_steps + 1):
-            dW = self.brownian.scalar_motion() * np.sqrt(self.dt)  # Incrément brownien
+            dW = self.brownian.scalar_motion()  # Incrément brownien
             path[t] = (path[t - 1] +
                        self.theta * (self.mu - path[t - 1]) * self.dt +
                        self.sigma * dW)
@@ -53,22 +53,37 @@ class OUProcess(AbstractStochasticProcess):
         """
         return r_t_previous + self.theta * (self.mu - r_t_previous) * dt + self.sigma * np.sqrt(dt) * dW_t
 
-    def simulate(self) -> np.ndarray:
-        """Simule des trajectoires de OU."""
+    def simulate(self, dW: np.ndarray = None) -> np.ndarray:
+        """
+        Simule des trajectoires du processus OU, soit avec un Brownien fourni (corrélé),
+        soit en générant un Brownien interne.
+
+        :param dW: (optionnel) Brownien (n_paths, n_steps) à utiliser. Si None, on le génère.
+        :return: Matrice (n_paths, n_steps + 1) des trajectoires simulées.
+        """
         paths = np.empty((self.n_paths, self.n_steps + 1))
         paths[:, 0] = self.initial_value
 
-        if self.compute_antithetic and self.n_paths % 2 == 0:
-            dW = self.brownian.vectorized_motion(self.n_paths // 2, self.n_steps)
-            dW = np.concatenate((dW, -dW), axis=0)
+        # Brownien fourni ou généré
+        if dW is None:
+            if self.compute_antithetic and self.n_paths % 2 == 0:
+                dW = self.brownian.vectorized_motion(self.n_paths // 2, self.n_steps)
+                dW = np.concatenate((dW, -dW), axis=0)
+            else:
+                dW = self.brownian.vectorized_motion(self.n_paths, self.n_steps)
         else:
-            dW = self.brownian.vectorized_motion(self.n_paths, self.n_steps)
+            # Vérif de sécurité
+            if dW.shape != (self.n_paths, self.n_steps):
+                raise ValueError("Le brownien fourni doit être de taille (n_paths, n_steps)")
 
+        # Coefficients constants
         exp_factor = np.exp(-self.theta * self.dt)
+        sqrt_var = self.sigma * np.sqrt((1 - exp_factor ** 2) / (2 * self.theta))
 
+        # Simulation vectorisée
         for t in range(1, self.n_steps + 1):
             paths[:, t] = (paths[:, t - 1] * exp_factor +
                            self.mu * (1 - exp_factor) +
-                           self.sigma * np.sqrt((1 - exp_factor**2) / (2 * self.theta)) * dW[:, t - 1])
+                           sqrt_var * dW[:, t - 1])
 
         return paths
