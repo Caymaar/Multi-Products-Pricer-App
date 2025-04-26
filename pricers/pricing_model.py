@@ -1,9 +1,10 @@
 from abc import ABC
 from market.market import Market
 from option.option import OptionPortfolio
-# from pricers.bs_pricer import BlackScholesPricer
+from pricers.bs_pricer import BlackScholesPricer
 import numpy as np
 import datetime
+from typing import Dict
 
 # ---------------- Model Abstract Class ----------------
 class Engine(ABC):
@@ -16,8 +17,8 @@ class Engine(ABC):
         self.dt = self.T / n_steps
         self.df = np.exp(-self.market.r * self.dt)
         self.t_div = self._calculate_t_div()
-        # Conversion de div_date en indice temporel si dividende discret
-        # self.bsm = BlackScholesPricer(self.market, self.option, self.t_div, self.dt, self.T)
+        # ** instanciation des BS pricer **
+        self._init_bsm_pricers()
 
     def _calculate_T(self):
         """
@@ -36,6 +37,33 @@ class Engine(ABC):
         else:
             return None
 
+    def _init_bsm_pricers(self):
+        """
+        Pour chaque option du portefeuille, crée un
+        BlackScholesPricer avec les bons T_i et dt_i.
+        """
+        self.bsm_pricers: Dict[str, BlackScholesPricer] = {}
+        for opt, T_i, dt_i in zip(self._options, self.T, self.dt):
+            # t_div reste le même pour toutes les options (indice de dividende)
+            pricer = BlackScholesPricer(
+                market=self.market,
+                option=opt,
+                t_div=self.t_div,
+                dt=dt_i,
+                T=T_i
+            )
+            self.bsm_pricers[opt.name] = pricer
+
+    def price_bs(self) -> np.ndarray:
+        """
+        Retourne un array des prix Black-Scholes pour chaque option du portefeuille.
+        """
+        prices = []
+        for opt in self._options:
+            pr = self.bsm_pricers[opt.name].price()
+            prices.append(pr)
+        return np.array(prices)
+
     @property
     def options(self):
         return self._options
@@ -43,7 +71,7 @@ class Engine(ABC):
     @options.setter
     def options(self, new_options):
         self._options = new_options
-        self.T = self.market.DaysCountConvention.year_fraction(start_date=self.pricing_date, end_date=self._option.T)
+        self.T = self._calculate_T()
         self.dt = self.T / self.n_steps
         self.t_div = self._calculate_t_div()
-        #self.bsm = BlackScholesPricer(self.market, self.option, self.t_div, self.dt, self.T)'''
+        self._init_bsm_pricers()

@@ -300,7 +300,7 @@ if __name__ == "__main__":
         print(f"→ Prix total stratégie : {price:.4f}")
 
         # Ajout du plot du payoff
-        #plot_strategy_payoff(strat)
+        plot_strategy_payoff(strat)
 
     # --- Pricing des stratégies américaines ---
     print("\n====== AMERICAN VANILLA STRATEGIES PRICING ======")

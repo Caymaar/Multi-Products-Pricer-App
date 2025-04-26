@@ -11,8 +11,7 @@ class Bond(ABC):
         """
         Classe abstraite pour les obligations.
         :param face_value: Valeur nominale de l'obligation
-        :param maturity: Date de pricing (datetime)
-        :param maturity: Date de maturité (datetime)
+        :param maturity: Temps à la maturité en années
         :param convention_days: Convention de jours (ex: "Act/365")
         """
         self.face_value = face_value

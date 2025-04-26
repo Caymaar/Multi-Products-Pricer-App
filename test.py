@@ -117,10 +117,7 @@ from investment_strategies.structured_strategies import Autocallable
 print("\n====== PRICING DES PRODUITS STRUCTURÉS ======\n")
 for prod in products:
     price = prod.price(pricer)
-    if isinstance(prod, Autocallable):
-        pct = price
-    else:
-        pct = price / prod.notional * 100
+    pct = price / prod.notional * 100
     print(f"{prod.name:35s} → Prix estimé : {pct:6.2f}% du notional")
 
 # --- Date de pricing et maturité à +1 an ---

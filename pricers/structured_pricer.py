@@ -77,44 +77,57 @@ class StructuredPricer:
         ])
         return S, times
 
-    def compute_autocall_payoffs(self,
-                                 S: np.ndarray,
-                                 coupon_barrier:     float,
-                                 call_barrier:       float,
-                                 protection_barrier: float,
-                                 coupon_rates:       np.ndarray,
-                                 obs_dates:          List[datetime],
-                                 notional:           float
-                                ) -> Tuple[np.ndarray, np.ndarray]:
+    def compute_autocall_cashflows(self,
+                                   S: np.ndarray,
+                                   coupon_barrier:     float,
+                                   call_barrier:       float,
+                                   protection_barrier: float,
+                                   coupon_rates:       np.ndarray,
+                                   obs_dates:          List[datetime],
+                                   notional:           float
+                                  ) -> Tuple[np.ndarray, np.ndarray]:
         n_paths, n_steps = S.shape
         S0 = self.market.S0
-        payoffs = np.zeros(n_paths)
-        red_times = np.zeros(n_paths)
+        # times & accruals
         times = np.array([self.dcc.year_fraction(self.pricing_date, d) for d in obs_dates])
         accruals = np.diff(np.concatenate([[0.0], times]))
         coupon_amts = coupon_rates * notional * accruals
         idxs = (times / times[-1] * (n_steps-1)).round().astype(int)
 
-        # observations intermédiaires
+        # cashflow matrix : one column per obs + one for maturity
+        n_obs = len(obs_dates)
+        cashflows = np.zeros((n_paths, n_obs))
+        called = np.zeros(n_paths, dtype=bool)
+
+        # intermediate observations
         for i, idx in enumerate(idxs):
-            alive = payoffs == 0
-            Si = S[alive, idx]
-            ids = np.where(alive)[0]
+            alive_ids = np.where(~called)[0]
+            Si = S[alive_ids, idx]
+
+            # first, any auto‐call
             mask_call = Si >= call_barrier * S0
-            payoffs[ids[mask_call]]  = coupon_amts[i] + notional
-            red_times[ids[mask_call]] = times[i]
-            mask_coup = (Si >= coupon_barrier * S0) & (~mask_call)
-            payoffs[ids[mask_coup]] = coupon_amts[i]
+            idx_call = alive_ids[mask_call]
+            cashflows[idx_call, i] = coupon_amts[i] + notional
+            called[idx_call] = True
 
-        # survivants à maturité
-        surv = payoffs == 0
-        ST = S[surv, -1]
+            # then, coupons for those still alive but above coupon barrier
+            alive2 = np.where(~called)[0]
+            Si2 = S[alive2, idx]
+            mask_coup = Si2 >= coupon_barrier * S0
+            idx_coup = alive2[mask_coup]
+            cashflows[idx_coup, i] = coupon_amts[i]
+
+        # maturity cashflows for survivors
+        surv_ids = np.where(~called)[0]
+        ST = S[surv_ids, -1]
         mask_prot = ST >= protection_barrier * S0
-        payoffs[surv][mask_prot] = coupon_amts[-1] + notional
-        payoffs[surv][~mask_prot] = (ST[~mask_prot] / S0) * notional
-        red_times[surv] = times[-1]
+        idx_prot  = surv_ids[mask_prot]
+        idx_loss  = surv_ids[~mask_prot]
+        cashflows[idx_prot, -1] += notional
+        cashflows[idx_loss, -1] += (ST[~mask_prot] / S0) * notional
 
-        return payoffs, red_times
+        # return CF matrix and times including maturity
+        return cashflows, times
 
     def discount(self,
                  cashflows: np.ndarray,

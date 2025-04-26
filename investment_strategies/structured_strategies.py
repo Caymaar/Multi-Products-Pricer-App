@@ -41,8 +41,8 @@ class StructuredProduct(Strategy):
             for opt, sign in opt_legs:
                 engine = pricer.get_mc_engine(opt)
                 p = float(engine.price(type="MC")[0])
-                qty = (invested/m)/p if p > 0 else 0.0
-                total += sign * qty * p
+                #qty = (invested/m)/p if p > 0 else 0.0
+                total += sign * p # * qty * p
         return total
 
 
@@ -74,19 +74,20 @@ class Autocallable(StructuredProduct):
 
     def price(self, pricer: StructuredPricer) -> float:
         pricer.dcc = self.dcc
-        total = super().price(pricer)
         S, _ = pricer.simulate_underlying(self.maturity_date, self.obs_dates)
-        payoffs, rt = pricer.compute_autocall_payoffs(
+        cashflows, times = pricer.compute_autocall_cashflows(
             S,
-            coupon_barrier=self.coupon_barrier,
-            call_barrier=self.call_barrier,
-            protection_barrier=self.protection_barrier,
-            coupon_rates=self.coupon_rates,
-            obs_dates=self.obs_dates,
-            notional=self.notional
+            self.coupon_barrier,
+            self.call_barrier,
+            self.protection_barrier,
+            self.coupon_rates,
+            self.obs_dates,
+            self.notional
         )
-        total += float(pricer.discount(payoffs, rt).mean())
-        return total
+        # actualisation colonne par colonne
+        zero_rates = np.array([pricer.zc_curve(t) for t in times])
+        discounted = cashflows * np.exp(- zero_rates * times)
+        return float(discounted.sum(axis=1).mean())
 
 
 class SweetAutocall(Autocallable):
