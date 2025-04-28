@@ -1,23 +1,132 @@
 from market.market import Market
-from option.option import Option, Call, Put
+from option.option import Call, Put, Option, OptionPortfolio
 import numpy as np
 import scipy.stats as stats
+from datetime import datetime
+
+
+class BSPortfolio:
+    def __init__(self, market, option_ptf: OptionPortfolio, pricing_date):
+        """
+        :param market: Instance du marché
+        :param option_ptf: Instance de OptionPortfolio
+        :param pricing_date: Date de valorisation
+        """
+        self.market = market
+        self.options = option_ptf
+        self.pricing_date = pricing_date
+        self.bse = {}  # Dictionnaire {(T, dt): TreeModel}
+        self.T = np.array([self.market.DaysCountConvention.year_fraction(start_date=pricing_date, end_date=option.T)
+                           for option in self.options.assets])
+
+        self._build_bse()
+
+    def _build_bse(self):
+        """
+        Construit un BS Engine pour chaque option.
+        """
+
+        for option in self.options.assets:
+            # Instancier un bse pour une option
+            pricer = BlackScholesPricer(
+                market=self.market,
+                option=option,
+                pricing_date=self.pricing_date
+            )
+
+            self.bse[option] = pricer
+
+    def price(self, type=None):
+        """
+        Renvoi un vecteur ou float de prix de tous les groupes d'options.
+        """
+        prices = np.array([])
+        for opt in self.bse.keys():
+            prices = np.append(prices, self.bse[opt].price())
+        return prices[-1] if len(prices)==1 else prices
+
+    def _vectorized_greek(self, greek_name):
+        greeks = np.array([])
+        for opt in self.bse.keys():
+            greek_func = getattr(self.bse[opt], greek_name)
+            greeks = np.append(greeks, greek_func())
+        greeks = np.array(greeks)
+        return greeks[-1] if len(greeks) == 1 else greeks
+
+    def delta(self):
+        return self._vectorized_greek('delta')
+
+    def gamma(self):
+        return self._vectorized_greek('gamma')
+
+    def vega(self):
+        return self._vectorized_greek('vega')
+
+    def theta(self):
+        return self._vectorized_greek('theta')
+
+    def rho(self):
+        return self._vectorized_greek('rho')
+
+    def speed(self):
+        return self._vectorized_greek('speed')
+
+    def recreate_model(self, **kwargs) -> "BSPortfolio":
+        """
+        Recrée une nouvelle instance du BlackScholesPricer en reprenant
+        tous les paramètres actuels, sauf ceux passés en kwargs.
+        """
+
+        base_params = {
+            "market":  self.market.copy(),
+            "option_ptf":  self.options,
+            "pricing_date":  self.pricing_date,
+        }
+
+        # Surcharge avec ce que l'utilisateur fournit
+        base_params.update(kwargs)
+
+        # Création de la nouvelle instance
+        return BSPortfolio(**base_params)
+
 
 # ---------------- Black-Scholes Pricer ----------------
 class BlackScholesPricer:
-    def __init__(self, market: Market, option: Option, t_div, dt, T):
+    def __init__(self, market: Market, option: Option, pricing_date: datetime):
         self.market = market  # Informations sur le marché (spot, taux, etc.)
+        self.pricing_date = pricing_date
         self.option = option  # Option (call ou put)
-        self.T = T
-        self.S0 = self._adjust_initial_price(t_div, dt)
+        self.T = self._calculate_T()
+        self.t_div = self._calculate_t_div()
+        self.S0 = self._adjust_initial_price()
         self.q = self._compute_dividend_yield()
         self.d1, self.d2 = None, None  # Initialisation des valeurs de d1 et d2
+
+    def _calculate_T(self):
+        """
+        Méthode pour calculer les temps jusqu'à l'expiration des options (T).
+        Retourne un array des durées en années entre la date de pricing et les dates de maturité.
+        """
+        return self.market.DaysCountConvention.year_fraction(start_date=self.pricing_date, end_date=self.option.T)
+
+    def _calculate_t_div(self):
+        """
+        Calcule l'indice temporel pour le dividende si le dividende est discret.
+        """
+        if self.market.div_type == "discrete" and self.market.div_date is not None:
+            return self.market.DaysCountConvention.year_fraction(start_date=self.pricing_date,end_date=self.market.div_date) # Conversion en année
+        else:
+            return None
 
     def european_exercise_check(self):
         """Détermine si une option américaine peut être traitée comme une option européenne."""
 
         # Vérifie si c'est une option européenne
         if self.option.exercise.lower() == "european":
+            return True
+
+        # Vérifie les conditions d'équivalence pour un Call américain
+        if isinstance(self.option, Call) and (not self.market.dividend) and self.market.r > 0:
             return True
 
         # Vérifie les conditions d'équivalence pour un Call américain
@@ -31,10 +140,10 @@ class BlackScholesPricer:
         # Sinon, ce n'est pas une option équivalente à une européenne
         return False
 
-    def _adjust_initial_price(self, t_div, dt):
+    def _adjust_initial_price(self):
         """ Ajuste le prix initial en fonction des dividendes. """
         if self.market.div_type == "discrete" and self.market.div_date is not None:
-            return self.market.S0 - self.market.dividend * np.exp(-self.market.r * t_div * dt)
+            return self.market.S0 - self.market.dividend * np.exp(-self.market.r * self.t_div)
         return self.market.S0
 
     def _compute_dividend_yield(self):
@@ -45,7 +154,7 @@ class BlackScholesPricer:
         """ Calcule d1 et d2 pour la formule de Black-Scholes. """
         sigma_sqrt_T = self.market.sigma * np.sqrt(self.T)
         self.d1 = (np.log(self.S0 / self.option.K) +
-              (self.market.r - self.q + 0.5 * self.market.sigma ** 2) * self.T) / sigma_sqrt_T
+                   (self.market.r - self.q + 0.5 * self.market.sigma ** 2) * self.T) / sigma_sqrt_T
         self.d2 = self.d1 - sigma_sqrt_T
 
     def price(self):
@@ -123,5 +232,22 @@ class BlackScholesPricer:
         elif isinstance(self.option, Put):
             return -self.option.K * self.T * np.exp(-self.market.r * self.T) * stats.norm.cdf(-self.d2) / 100
 
+    def speed(self):
+        """ Calcul du Speed (dérivée seconde du prix de l'option par rapport au spot). """
+        if not self.european_exercise_check():
+            return "NA"
+        self._compute_d1_d2()
+
+        # Calcul du terme de base du Gamma
+        gamma_term = np.exp(-self.q * self.T) * stats.norm.pdf(self.d1) / (
+                    self.S0 * self.market.sigma * np.sqrt(self.T))
+
+        # Calcul de la dérivée de Gamma par rapport à S0
+        # Dérivée de la formule du Gamma par rapport à S0
+        dGamma_dS = (-gamma_term / self.S0) * (1 - self.d1 / (self.S0 * self.market.sigma * np.sqrt(self.T)))
+
+        return dGamma_dS
+
+
     def all_greeks(self):
-        return [self.delta(),self.gamma(),self.vega(),self.theta(),self.rho()]
+        return [self.delta(),self.gamma(),self.vega(),self.theta(),self.rho(), self.gamma()]

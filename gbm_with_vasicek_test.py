@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-from rate.vasicek_v2 import VasicekModel
+from rate.vasicek import VasicekModel
 from stochastic_process.gbm_process import GBMProcess
 from market.market import Market
 
@@ -10,7 +10,7 @@ n_paths = 100
 n_steps = 252
 dt = 1 / 252
 T = n_steps * dt
-rho = 0.5  # corrélation GBM / taux
+rho = -0.15 # corrélation GBM / taux
 
 # === 2. Modèle de taux : Vasicek ===
 vasicek = VasicekModel(

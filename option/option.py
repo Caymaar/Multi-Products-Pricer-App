@@ -12,7 +12,7 @@ class Option(ABC):
         self.K = K  # Strike price
         self.T = maturity  # Time to maturity
         self.exercise = exercise.lower()  # "european", "american", etc.
-        self.name = None
+        self.name = f'{self.__class__.__name__}, K={self.K}, T={self.T}, exercise={self.exercise}'
 
     @abstractmethod
     def intrinsic_value(self, S):
@@ -31,12 +31,16 @@ class Option(ABC):
 
 # ---------------- Option Portfolio Class ----------------
 class OptionPortfolio:
-    def __init__(self, options: Option | List[Option]):
+    def __init__(self, options: Option | List[Option], weights : List[float] = None):
         """
         Initialise un portefeuille d'options.
         :param options: Liste d'options à inclure dans le portefeuille.
         """
-        self.options = options
+        self.assets = options
+        self.weights = weights if weights is not None else [1]*len(options)
+        if len(self.assets) != len(self.weights):
+            raise ValueError("La taille des actifs du portefeuille doit être égale aux poids alloués !")
+
 
     def intrinsic_value(self, S_slices):
         """
@@ -45,16 +49,16 @@ class OptionPortfolio:
         :return: Valeur totale du portefeuille d'options.
         """
         total_value = 0
-        for option, S in zip(self.options, S_slices):
+        for option, S in zip(self.assets, S_slices):
             total_value += option.intrinsic_value(S)
         return total_value
+
 
 
 # ---------------- Call and Put Option Classes ----------------
 class Call(Option):
     def __init__(self, K, maturity, exercise="european"):
         super().__init__(K, maturity, exercise)
-        self.name = f'{self.__class__.__name__}, K={self.K}, T={self.T.date()}, exercise={self.exercise}'
 
     def intrinsic_value(self, S):
         """ Payoff d'un Call à la période observée. """
@@ -65,7 +69,6 @@ class Call(Option):
 class Put(Option):
     def __init__(self, K, maturity, exercise="european"):
         super().__init__(K, maturity, exercise)
-        self.name = f'{self.__class__.__name__}, K={self.K}, T={self.T.date()}, exercise={self.exercise}'
 
     def intrinsic_value(self, S):
         """ Payoff d'un Put à la période observée. """

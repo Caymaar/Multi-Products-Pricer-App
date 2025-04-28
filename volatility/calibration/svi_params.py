@@ -1,4 +1,3 @@
-# Description: This file contains the data classes for SVI parameters and calibration parameters.
 from dataclasses import dataclass
 from typing import List
 

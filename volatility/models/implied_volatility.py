@@ -1,10 +1,12 @@
 from scipy.optimize import minimize_scalar
 from risk_metrics.greeks import GreeksCalculator  # En supposant que votre module de Greeks est disponible
-from pricers.bs_pricer import BlackScholesPricer
+from pricers.bs_pricer import BSPortfolio
+from pricers.tree_pricer import TreePortfolio
 from pricers.mc_pricer import MonteCarloEngine
 from market.market import Market
-from option.option import Call
+from option.option import OptionPortfolio, Call
 from datetime import datetime
+from typing import Union
 
 class ImpliedVolatilityCalculator:
     """
@@ -12,7 +14,7 @@ class ImpliedVolatilityCalculator:
     la volatilité comme paramètre via le module `Market`.
     """
 
-    def __init__(self, market_price: float, model, greeks_calculator: GreeksCalculator):
+    def __init__(self, market_price: float, model, greeks_calculator: GreeksCalculator = None):
         self.market_price = market_price  # Prix de marché observé
         self.model = model  # Modèle de pricing (MC, Tree, BS...)
         self.greeks_calculator = greeks_calculator  # Calculateur de Greeks
@@ -26,8 +28,8 @@ class ImpliedVolatilityCalculator:
         :return: Prix théorique de l'option.
         """
         updated_market = self.model.market.copy(sigma=sigma)
-        if isinstance(self.model, MonteCarloEngine):
-            updated_model = self.model._recreate_model(market=updated_market)
+        if isinstance(self.model, Union[MonteCarloEngine, BSPortfolio]):
+            updated_model = self.model.recreate_model(market=updated_market)
         else:
             self.model.market = updated_market
             updated_model = self.model
@@ -51,7 +53,7 @@ class ImpliedVolatilityCalculator:
         :return: Vega calculé.
         """
         updated_market = self.model.market.copy(sigma=sigma)
-        updated_model = self.model._recreate_model(market=updated_market)
+        updated_model = self.model.recreate_model(market=updated_market)
         self.greeks_calculator = GreeksCalculator(updated_model)  # Réinstancie le calculateur de Greeks
         return self.greeks_calculator.vega()
 
@@ -122,23 +124,30 @@ if __name__ == "__main__":
 
     # Marché et option
     market = Market(S0=100, r=0.05, sigma=0.2, dividend=0)
-    option = Call(K=100, maturity=maturity_date)
+    c = Call(K=100, maturity=maturity_date)
+    option_ptf = OptionPortfolio([c])
 
     # Monte Carlo Model
-    mc_model = MonteCarloEngine(market, option, pricing_date, n_paths=10000, n_steps=100, seed=2)
+    mc_model = MonteCarloEngine(market, option_ptf, pricing_date, n_paths=10000, n_steps=100, seed=2)
 
     # Calculateur de grecques (utile pour le vega pour N-R)
-    GC = GreeksCalculator(mc_model)
+    GCM = GreeksCalculator(mc_model)
 
     # Black-Scholes Pricer (pas besoin de GreeksCalculator)
-    bs_pricer = BlackScholesPricer(market, option, t_div=0, dt=(maturity_date - pricing_date).days / 360, T=1.0)
+    bs_model = BSPortfolio(market, option_ptf, pricing_date)
+
+    # Trinomial Pricer
+    tree_model = TreePortfolio(market=market, option_ptf=option_ptf, pricing_date=pricing_date, n_steps=300)
+
+    # Calculateur de grecques (utile pour le vega pour N-R)
+    GCT = GreeksCalculator(tree_model)
 
     # Prix de marché fictif
     market_price = 10.0
 
     # ---------------- Test avec Monte Carlo Model ----------------
     print("----- Monte Carlo Model -----")
-    mc_iv_calculator = ImpliedVolatilityCalculator(market_price, mc_model, GC)
+    mc_iv_calculator = ImpliedVolatilityCalculator(market_price, mc_model, GCM)
 
     iv_mc_dicho = mc_iv_calculator.calculate_by_dichotomy()
     print(f"Volatilité implicite Monte Carlo (Dichotomie) : {iv_mc_dicho:.6f}")
@@ -148,10 +157,20 @@ if __name__ == "__main__":
 
     # ---------------- Test avec Black-Scholes Pricer ----------------
     print("----- Black-Scholes Pricer -----")
-    bs_iv_calculator = ImpliedVolatilityCalculator(market_price, bs_pricer, None)
+    bs_iv_calculator = ImpliedVolatilityCalculator(market_price, bs_model, None)
 
     iv_bs_dicho = bs_iv_calculator.calculate_by_dichotomy()
     print(f"Volatilité implicite Black-Scholes (Dichotomie) : {iv_bs_dicho:.6f}")
 
     iv_bs_opt = bs_iv_calculator.calculate_by_optimization()
     print(f"Volatilité implicite Black-Scholes (Optimisation) : {iv_bs_opt:.6f}")
+
+    # ---------------- Test avec Trinomial Pricer ----------------
+    print("----- Trionomial Pricer -----")
+    tree_iv_calculator = ImpliedVolatilityCalculator(market_price, tree_model, GCT)
+
+    iv_tree_dicho = bs_iv_calculator.calculate_by_dichotomy()
+    print(f"Volatilité implicite Trinomial (Dichotomie) : {iv_tree_dicho:.6f}")
+
+    iv_tree_opt = bs_iv_calculator.calculate_by_optimization()
+    print(f"Volatilité implicite Trinomial (Optimisation) : {iv_tree_opt:.6f}")

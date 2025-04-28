@@ -2,7 +2,7 @@ from market.day_count_convention import DayCountConvention
 
 # ---------------- Market Class ----------------
 class Market:
-    def __init__(self, S0, r, sigma, dividend, div_type="continuous", div_date=None, days_convention="Actual/365"):
+    def __init__(self, S0, r, sigma, dividend=0, div_type="continuous", div_date=None, days_convention="Actual/365"):
         self.S0 = S0  # Prix initial du sous-jacent
         self.r = r  # Taux d'intérêt sans risque
         self.sigma = sigma  # Volatilité

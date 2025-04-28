@@ -1,4 +1,3 @@
-# volatility/svi.py
 import math
 import numpy as np
 import matplotlib.pyplot as plt
@@ -6,7 +5,7 @@ from scipy.optimize import minimize
 from typing import List
 from volatility.abstract_volatility import VolatilityModel
 from volatility.calibration.svi_params import SVIParams, MarketDataPoint, SVICalibrationParams
-from data_management.manage_bloomberg_data import OptionDataParser
+from data.management.manage_bloomberg_data import OptionDataParser
 import pandas as pd
 import os
 from scipy.interpolate import interp1d

@@ -22,6 +22,7 @@ class BearCallSpread(Strategy):
         super().__init__("Bear Call Spread", pricing_date, maturity_date, convention_days)
         self.call_sell = Call(strike_sell, maturity_date, exercise)
         self.call_buy = Call(strike_buy, maturity_date, exercise)
+        self._populate_legs()
 
     def get_legs(self):
         return [(self.call_sell, -1), (self.call_buy, 1)]
@@ -41,6 +42,7 @@ class PutCallSpread(Strategy):
         super().__init__("Put-Call Spread", pricing_date, maturity_date, convention_days)
         self.put = Put(strike, maturity_date, exercise)
         self.call = Call(strike, maturity_date, exercise)
+        self._populate_legs()
 
     def get_legs(self):
         return [(self.put, 1), (self.call, -1)]
@@ -61,6 +63,7 @@ class BullCallSpread(Strategy):
         super().__init__("Bull Call Spread", pricing_date, maturity_date, convention_days)
         self.call_buy = Call(strike_buy, maturity_date, exercise)
         self.call_sell = Call(strike_sell, maturity_date, exercise)
+        self._populate_legs()
 
     def get_legs(self):
         return [(self.call_buy, 1), (self.call_sell, -1)]
@@ -84,6 +87,7 @@ class ButterflySpread(Strategy):
         self.call_low = Call(strike_low, maturity_date, exercise)
         self.call_mid = Call(strike_mid, maturity_date, exercise)
         self.call_high = Call(strike_high, maturity_date, exercise)
+        self._populate_legs()
 
     def get_legs(self):
         return [(self.call_low, 1), (self.call_mid, -2), (self.call_high, 1)]
@@ -102,6 +106,7 @@ class Straddle(Strategy):
         super().__init__("Straddle", pricing_date, maturity_date, convention_days)
         self.call = Call(strike, maturity_date, exercise)
         self.put = Put(strike, maturity_date, exercise)
+        self._populate_legs()
 
     def get_legs(self):
         return [(self.call, 1), (self.put, 1)]
@@ -122,6 +127,7 @@ class Strap(Strategy):
         self.call1 = Call(strike, maturity_date, exercise)
         self.call2 = Call(strike, maturity_date, exercise)
         self.put = Put(strike, maturity_date, exercise)
+        self._populate_legs()
 
     def get_legs(self):
         return [(self.call1, 1), (self.call2, 1), (self.put, 1)]
@@ -142,6 +148,7 @@ class Strip(Strategy):
         self.call = Call(strike, maturity_date, exercise)
         self.put1 = Put(strike, maturity_date, exercise)
         self.put2 = Put(strike, maturity_date, exercise)
+        self._populate_legs()
 
     def get_legs(self):
         return [(self.call, 1), (self.put1, 1), (self.put2, 1)]
@@ -163,6 +170,7 @@ class Strangle(Strategy):
         super().__init__("Strangle", pricing_date, maturity_date, convention_days)
         self.put = Put(lower_strike, maturity_date, exercise)
         self.call = Call(upper_strike, maturity_date, exercise)
+        self._populate_legs()
 
     def get_legs(self):
         return [(self.put, 1), (self.call, 1)]
@@ -189,6 +197,7 @@ class Condor(Strategy):
         self.call2 = Call(strike2, maturity_date, exercise)
         self.call3 = Call(strike3, maturity_date, exercise)
         self.call4 = Call(strike4, maturity_date, exercise)
+        self._populate_legs()
 
     def get_legs(self):
         return [(self.call1, 1), (self.call2, -1), (self.call3, -1), (self.call4, 1)]

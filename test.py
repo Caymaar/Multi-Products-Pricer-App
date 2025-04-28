@@ -1,5 +1,5 @@
 from pricers.mc_pricer import MonteCarloEngine
-from pricers.tree_pricer import TreeModel
+from pricers.tree_pricer import TreePortfolio
 from datetime import datetime, timedelta
 import pandas as pd
 from market.market import Market
@@ -112,8 +112,6 @@ products = [
 ]
 
 # === 7) Pricing et affichage ===
-from investment_strategies.structured_strategies import Autocallable
-
 print("\n====== PRICING DES PRODUITS STRUCTURÉS ======\n")
 for prod in products:
     price = prod.price(pricer)
@@ -165,8 +163,23 @@ ci_low, ci_up = engine.price_confidence_interval(type="MC")
 print(f"Prix estimé      : {price:.4f}")
 print(f"Intervalle 95%   : [{ci_low:.4f}, {ci_up:.4f}]")
 
+
+print("\n====== AMERICAN LONGSTAFF PRICING ======")
+
+# --- Pricing des options ---
+try:
+    price = engine.price(type="Longstaff")
+    ci_low, ci_up = engine.price_confidence_interval(type="Longstaff")
+
+    print(f"Prix estimé      : {price:.4f}")
+    print(f"Intervalle 95%   : [{ci_low:.4f}, {ci_up:.4f}]")
+
+except NotImplementedError as e:
+    print(f"NotImplementedError: {e}")
+
+
 # Options testables avec l'arbre trinomial (pas de barrières ici)
-options_tree = [
+options_tree = OptionPortfolio([
     Call(K, maturity_date, exercise="european"),
     Put(K, maturity_date, exercise="european"),
     DigitalCall(K, maturity_date, exercise="european", payoff=10.0),
@@ -175,56 +188,17 @@ options_tree = [
     Put(K, maturity_date, exercise="american"),
     DigitalCall(K, maturity_date, exercise="american", payoff=10.0),
     DigitalPut(K, maturity_date, exercise="american", payoff=10.0),
-]
+])
 
 print("\n====== TRINOMIAL TREE PRICING ======")
 
-for opt in options_tree:
-    print(f"\n--- {opt.__class__.__name__} ({opt.exercise}) ---")
+engine = TreePortfolio(
+    market=market,
+    option_ptf=options_tree,
+    pricing_date=pricing_date,
+    n_steps=n_steps
+)
 
-    engine = TreeModel(
-        market=market,
-        option=opt,
-        pricing_date=pricing_date,
-        n_steps=n_steps
-    )
+price = engine.price()
+print(f"Prix estimé (Trinomial Tree) : {price:.4f}")
 
-    price = engine.price()
-    print(f"Prix estimé (Trinomial Tree) : {price:.4f}")
-
-# --- Liste d'options américaines à tester ---
-options = [
-    Call(K, maturity_date, exercise="american"),
-    Put(K, maturity_date, exercise="american"),
-    DigitalCall(K, maturity_date, exercise="american", payoff=10.0),
-    DigitalPut(K, maturity_date, exercise="american", payoff=10.0),
-    UpAndOutCall(K, maturity_date, barrier=120, rebate=0, exercise="american"),
-    DownAndOutPut(K, maturity_date, barrier=80, rebate=0, exercise="american"),
-    UpAndInCall(K, maturity_date, barrier=120, rebate=0, exercise="american"),
-    DownAndInPut(K, maturity_date, barrier=80, rebate=0, exercise="american"),
-]
-
-print("\n====== AMERICAN LONGSTAFF PRICING ======")
-
-# --- Pricing des options ---
-for opt in options:
-    print(f"\n--- {opt.__class__.__name__} (American) ---")
-
-    engine = MonteCarloEngine(
-        market=market,
-        option=opt,
-        pricing_date=pricing_date,
-        n_paths=n_paths,
-        n_steps=n_steps,
-        seed=seed
-    )
-
-    try:
-        price = engine.price(type="Longstaff")
-        ci_low, ci_up = engine.price_confidence_interval(type="Longstaff")
-
-        print(f"Prix estimé      : {price:.4f}")
-        print(f"Intervalle 95%   : [{ci_low:.4f}, {ci_up:.4f}]")
-
-    except NotImplementedError as e:
-        print(f"NotImplementedError: {e}")

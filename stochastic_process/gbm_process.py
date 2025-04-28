@@ -93,31 +93,3 @@ class GBMProcess(AbstractStochasticProcess):
             self.paths_vectorized = paths
 
         return self.paths_vectorized
-
-    # def simulate2(self) -> np.ndarray:
-    #     """
-    #     Génère des trajectoires GBM avec une méthode vectorielle (sans boucles).
-    #     """
-    #     if self.paths_vectorized is None:
-    #         # Initialisation des chemins
-    #         paths = np.empty((self.n_paths, self.n_steps + 1))
-    #         paths[:, 0] = self.market.S0  # Initialisation à S0
-    #
-    #         if self.compute_antithetic and self.n_paths % 2 == 0:
-    #             dW = self.brownian.vectorized_motion(self.n_paths // 2, self.n_steps)
-    #             dW = np.concatenate((dW, -dW), axis=0)
-    #         else:
-    #             dW = self.brownian.vectorized_motion(self.n_paths, self.n_steps)
-    #
-    #         # Calcul des incréments pour tous les chemins
-    #         increments = self.get_factors(dW)
-    #
-    #         # Diffusions
-    #         paths[:, 1:] = self.market.S0 * increments
-    #
-    #         # Application des dividendes discrets éventuels
-    #         self._apply_dividends(paths)
-    #
-    #         self.paths_vectorized = paths
-    #
-    #     return self.paths_vectorized

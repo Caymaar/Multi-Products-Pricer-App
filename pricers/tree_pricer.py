@@ -1,10 +1,111 @@
 import numpy as np
 from pricers.node import Node
-from pricers.pricing_model import Engine  # Importation de la classe mère
+from pricers.pricing_model import Engine
+from collections import defaultdict
+from option.option import OptionPortfolio
+
+class TreePortfolio:
+    def __init__(self, market, option_ptf: OptionPortfolio, pricing_date, n_steps):
+        """
+        :param market: Instance du marché
+        :param option_ptf: Instance de OptionPortfolio
+        :param pricing_date: Date de valorisation
+        :param n_steps: Nombre d'étapes de l'arbre
+        """
+        self.market = market
+        self.options = option_ptf
+        self.pricing_date = pricing_date
+        self.n_steps = n_steps
+        self.trees = {}  # Dictionnaire {(T, dt): (TreeModel,options)}
+        self._alpha = np.array([])  # liste des alphas pour chaque arbre de chaque option
+        self._build_trees()
+
+    def _build_trees(self):
+        """
+        Construit un arbre par groupe d'options ayant même maturité et même dt.
+        """
+        option_groups = defaultdict(list)
+
+        for option in self.options.assets:
+            T = self.market.DaysCountConvention.year_fraction(
+                start_date=self.pricing_date, end_date=option.T
+            )
+            dt = T / self.n_steps
+            key = (round(T, 6), round(dt, 6))
+
+            option_groups[key].append(option)  # Dictionnaire {(T, dt): [options]}
+
+        for key, options in option_groups.items():
+
+            # Instancier un arbre pour ce groupe, avec la première option
+            tree = TreeModel(
+                market=self.market,
+                option=OptionPortfolio([options[0]], [self.options.weights[0]]),  # Un dummy pour construire l'arbre
+                pricing_date=self.pricing_date,
+                n_steps=self.n_steps
+            )
+            # On stocke (l'arbre, les options associées)
+            self.trees[key] = (tree, options)
+
+            # Pour chaque option, associer le _alpha du tree à l'option
+            for _ in options:
+                self._alpha = np.append(self._alpha, tree.alpha)
+
+    def recreate_model(self, **kwargs) -> "TreePortfolio":
+        """
+        Recrée une nouvelle instance du TreePortfolio en reprenant
+        tous les paramètres actuels, sauf ceux passés en kwargs.
+        """
+
+        base_params = {
+            "market": self.market.copy(),
+            "option_ptf": OptionPortfolio(self.options.assets, self.options.weights),
+            "pricing_date": self.pricing_date,
+            "n_steps": self.n_steps,
+        }
+
+        # Surcharge avec ce que l'utilisateur fournit
+        base_params.update(kwargs)
+
+        # Création de la nouvelle instance
+        return TreePortfolio(**base_params)
+
+
+    def price(self, **kwargs):
+        """
+        Renvoi un vecteur ou float de prix de tous les groupes d'options.
+        """
+        prices = np.array([])
+        for (tree, options) in self.trees.values():
+            for option in options:
+                idx = self.options.assets.index(option) # Retrouver l'indice de l'option et son poids
+                weight = self.options.weights[idx]
+                tree.tree_price = None # Set le prix de l'option a None pour le recalcul
+                tree.options = OptionPortfolio([option], [weight])
+                prices = np.append(prices,tree.price(**kwargs))
+        return prices[-1] if len(prices)==1 else prices
+
+    def aggregated_price(self):
+        """
+        Calcule la somme des prix de tous les groupes d'options.
+        """
+        total_price = 0
+        for (tree, options) in self.trees.values():
+            for option in options:
+                tree.assets = option
+                tree.tree_price = None  # Reset le prix pour recalculer
+                total_price += tree.price()
+        return total_price
+
 
 class TreeModel(Engine):
     def __init__(self, market, option, pricing_date, n_steps, THRESHOLD=1e-7):
         super().__init__(market, option, pricing_date, n_steps=n_steps)  # Appel du constructeur parent
+
+        # Ajustement pour un pricing d'un portefeuille d'option unique et non vectoriel par rapport à Monte Carlo
+        self.dt = self.dt[-1]
+        self.df = self.df[-1]
+        self.t_div = self.t_div[-1] if self.t_div is not None else None
 
         self.THRESHOLD = THRESHOLD
         self.alpha = np.exp(self.market.sigma * np.sqrt(3 * self.dt))
@@ -233,10 +334,10 @@ class TreeModel(Engine):
             average = self.average_child_value_no_div(current_node)
 
         # According to exec_type (European or American)
-        if self.option.exercise == "european":
+        if self.options.assets[-1].exercise == "european":
             return average
-        elif self.option.exercise == "american":
-            return max(average, self.option.intrinsic_value(current_node.S))
+        elif self.options.assets[-1].exercise == "american":
+            return max(average, self.options.assets[-1].intrinsic_value(current_node.S))
         else:
             raise ValueError("Execution type wrongly specified. Please only use 'European' or 'American'")
 
@@ -246,15 +347,15 @@ class TreeModel(Engine):
 
         if self.tree_price is None:
             trunc_node = self.get_trunc_node(self.n_steps)
-            trunc_node.NFV = self.option.intrinsic_value(trunc_node.S)
+            trunc_node.NFV = self.options.assets[-1].intrinsic_value(trunc_node.S)
 
             up_node, down_node = trunc_node, trunc_node
             while up_node.bro_up is not None:
                 up_node = up_node.bro_up
-                up_node.NFV = self.option.intrinsic_value(up_node.S)
+                up_node.NFV = self.options.assets[-1].intrinsic_value(up_node.S)
             while down_node.bro_down is not None:
                 down_node = down_node.bro_down
-                down_node.NFV = self.option.intrinsic_value(down_node.S)
+                down_node.NFV = self.options.assets[-1].intrinsic_value(down_node.S)
 
             step = self.n_steps
             # Loop over parent Nodes
