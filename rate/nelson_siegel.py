@@ -4,8 +4,9 @@ from scipy.optimize import minimize
 import plotly.graph_objects as go
 from rate.abstract_taux import AbstractRateModel
 
+
 class NelsonSiegelModel(AbstractRateModel):
-    def __init__(self, beta0, beta1, beta2, lambda1):
+    def __init__(self, beta0: float, beta1: float, beta2: float, lambda1: float):
         """
         Initialisation du modèle Nelson-Siegel.
         :param beta0: niveau de long terme
@@ -18,89 +19,76 @@ class NelsonSiegelModel(AbstractRateModel):
         self.beta2 = beta2
         self.lambda1 = lambda1
 
-    def yield_value(self, t):
+    def yield_value(self, t: float) -> float:
         """
-        Calcule le taux pour une échéance donnée t.
+        Calcule le taux pour une échéance donnée t selon Nelson-Siegel.
         """
-        # Gestion de la division par zéro pour t == 0
         if t == 0:
+            # Limite pour éviter la division par zéro
             return self.beta0 + self.beta1 + 0.5 * self.beta2
+
         factor = t / self.lambda1
         term1 = (1 - np.exp(-factor)) / factor
         term2 = term1 - np.exp(-factor) - np.exp(-factor)
         return self.beta0 + self.beta1 * term1 + self.beta2 * term2
 
-    def calibrate(self, maturities, observed_yields, initial_guess):
+    @classmethod
+    def calibrate(cls,
+                  maturities: np.ndarray,
+                  observed_yields: np.ndarray,
+                  initial_guess: list) -> 'NelsonSiegelModel':
         """
-        Calibre les paramètres du modèle Nelson-Siegel.
+        Calibre les paramètres du modèle Nelson-Siegel et renvoie une instance configurée.
 
-        :param maturities: Tableau des échéances (obligatoire pour ce modèle)
-        :param observed_yields: Tableau des rendements observés
-        :param initial_guess: Estimation initiale des paramètres [beta0, beta1, beta2, lambda1]
-        :return: Les paramètres calibrés
+        :param maturities: tableau des échéances (en années)
+        :param observed_yields: tableau des rendements observés
+        :param initial_guess: estimation initiale des paramètres [beta0, beta1, beta2, lambda1]
+        :return: instance NelsonSiegelModel calibrée
         """
         if maturities is None or observed_yields is None or initial_guess is None:
             raise ValueError(
-                "Pour Nelson-Siegel, 'maturities', 'observed_yields' et 'initial_guess' doivent être fournis.")
+                "Pour Nelson-Siegel, 'maturities', 'observed_yields' et 'initial_guess' sont requis.")
 
-        # Définition de la fonction objectif (somme des carrés des erreurs)
         def objective(params):
-            beta0, beta1, beta2, lambda1 = params
-            y_pred = []
-            for t in maturities:
+            b0, b1, b2, lam = params
+            errors = []
+            for t, obs in zip(maturities, observed_yields):
                 if t == 0:
-                    y = beta0 + beta1 + 0.5 * beta2
+                    y = b0 + b1 + 0.5 * b2
                 else:
-                    factor = t / lambda1
-                    term1 = (1 - np.exp(-factor)) / factor
-                    term2 = term1 - np.exp(-factor) - np.exp(-factor)
-                    y = beta0 + beta1 * term1 + beta2 * term2
-                y_pred.append(y)
-            y_pred = np.array(y_pred)
-            return np.sum((y_pred - observed_yields) ** 2)
+                    fac = t / lam
+                    t1 = (1 - np.exp(-fac)) / fac
+                    t2 = t1 - np.exp(-fac) - np.exp(-fac)
+                    y = b0 + b1 * t1 + b2 * t2
+                errors.append((y - obs) ** 2)
+            return np.sum(errors)
 
-        # Exécution de l'optimisation avec Nelder-Mead
         res = minimize(objective, initial_guess, method='Nelder-Mead')
-        self.beta0, self.beta1, self.beta2, self.lambda1 = res.x
-        return res.x
+        beta0, beta1, beta2, lambda1 = res.x
+        return cls(beta0, beta1, beta2, lambda1)
 
-    def plot_fit(self, maturities, observed_yields, n_points=100, title="Calibration du modèle Nelson-Siegel"):
+    def plot_fit(self,
+                 maturities: np.ndarray,
+                 observed_yields: np.ndarray,
+                 n_points: int = 100,
+                 title: str = "Calibration du modèle Nelson-Siegel") -> None:
         """
-        Trace la courbe ajustée par le modèle ainsi que les données observées.
-
-        :param maturities: tableau des échéances observées
-        :param observed_yields: tableau des rendements observés
-        :param n_points: nombre de points pour tracer la courbe lissée
-        :param title: titre du graphique
+        Trace la courbe calibrée et les données observées.
         """
         maturities_fine = np.linspace(min(maturities), max(maturities), n_points)
-        fitted_yields = self.yield_curve_array(maturities_fine)
+        fitted = np.array([self.yield_value(t) for t in maturities_fine])
 
         fig = go.Figure()
-
-        fig.add_trace(go.Scatter(
-            x=maturities,
-            y=observed_yields,
-            mode='markers',
-            name="Données observées",
-            marker=dict(color='black')
-        ))
-
-        fig.add_trace(go.Scatter(
-            x=maturities_fine,
-            y=fitted_yields,
-            mode='lines',
-            name="Courbe Nelson-Siegel"
-        ))
-
-        fig.update_layout(
-            title=title,
-            xaxis_title="Échéance (t)",
-            yaxis_title="Rendement",
-            template="plotly_white"
-        )
-
+        fig.add_trace(go.Scatter(x=maturities, y=observed_yields,
+                                 mode='markers', name='Observé', marker=dict(color='black')))
+        fig.add_trace(go.Scatter(x=maturities_fine, y=fitted,
+                                 mode='lines', name='Nelson-Siegel'))
+        fig.update_layout(title=title,
+                          xaxis_title='Échéance (années)',
+                          yaxis_title='Taux (%)',
+                          template='plotly_white')
         fig.show()
+
 
 if __name__ == "__main__":
     np.random.seed(123)

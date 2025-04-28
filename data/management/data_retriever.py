@@ -1,3 +1,10 @@
+import sys
+import os
+
+# Ajouter dynamiquement le chemin du répertoire principal du projet
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
+sys.path.append(project_root)
+
 from utils import get_price_data, get_rate_data, get_implied_vol, get_zone
 import numpy as np
 from datetime import datetime

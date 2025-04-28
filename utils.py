@@ -6,7 +6,7 @@ from typing import Union
 
 def get_config():
     # Obtenir le chemin absolu du répertoire racine du projet
-    project_root = Path(__file__).parent.parent
+    project_root = Path(__file__).parent
     
     config = configparser.ConfigParser()
     config_path = os.path.join(project_root, 'config', 'config.ini')
@@ -17,7 +17,7 @@ def get_price_data(stock_name: str) -> pd.Series:
     config = get_config()
     
     # Récupérer les chemins
-    project_root = Path(__file__).parent.parent
+    project_root = Path(__file__).parent
     prices_path = project_root / config['paths']['data_path'] / config['paths']['prices_path']
     
     # Trouver le ticker associé
@@ -43,7 +43,7 @@ def get_rate_data(rate_name: str, type: str) -> Union[pd.DataFrame, pd.Series]:
     config = get_config()
     
     # Récupérer les chemins
-    project_root = Path(__file__).parent.parent
+    project_root = Path(__file__).parent
     rate_path = project_root / config['paths']['data_path'] / config['paths'][f'{type.lower()}_rate_path']
     
     df = pd.read_csv(rate_path / f"{rate_name}.csv", sep=';', parse_dates=['Date'], dayfirst=True)
@@ -70,9 +70,18 @@ def get_implied_vol(stock_name: str) -> pd.DataFrame:
     config = get_config()
     
     # Récupérer les chemins
-    project_root = Path(__file__).parent.parent
+    project_root = Path(__file__).parent
     implied_vol_path = project_root / config['paths']['data_path'] / config['paths']['options_path']
     
     df = pd.read_csv(implied_vol_path / f"{stock_name}.csv", sep=';')
 
     return df
+
+
+def tenor_to_years(tenor: str) -> float:
+    unit = tenor[-1]
+    n    = float(tenor[:-1])
+    if   unit == 'W': return n * 7/365
+    elif unit == 'M': return n * 30/365
+    elif unit == 'Y': return n
+    else:  raise ValueError(f"Unité inconnue : {unit}")

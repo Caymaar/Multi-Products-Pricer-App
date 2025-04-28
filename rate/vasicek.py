@@ -1,10 +1,14 @@
 import numpy as np
 from rate.abstract_taux import AbstractRateModel
+from rate.bootstrap import bootstrap_zero_curve
 import matplotlib.pyplot as plt
 from stochastic_process.ou_process import OUProcess
 from typing import Union
 import pandas as pd
+import numpy as np
+from scipy.optimize import minimize
 import os
+
 
 class VasicekModel(AbstractRateModel, OUProcess):
     """
@@ -84,60 +88,26 @@ class VasicekModel(AbstractRateModel, OUProcess):
             **kwargs
         )
 
-    @staticmethod
-    def calibrate_from_file(source: str = "sofr", **kwargs) -> 'VasicekModel':
-        """
-        Calibre les paramètres à partir d'un fichier CSV (SOFR, LIBOR...).
-        """
-        DATA_PATH = os.path.dirname(__file__) + "/../data_taux"
-        source = source.lower()
-        file_map = {
-            "sofr": ("sofr_data.csv", "SOFR (O/N)"),
-            "libor": ("libor.csv", "LIBOR 3M ICE")
-        }
-
-        if source not in file_map:
-            raise ValueError("Source inconnue")
-
-        file_name, column_name = file_map[source]
-        df =  pd.read_csv(f"{DATA_PATH}/{file_name}", parse_dates=["DATES"], dayfirst=True)
-        df.sort_values("DATES", inplace=True)
-        df.reset_index(drop=True, inplace=True)
-        r = df[column_name].dropna().values / 100
-        dates = df["DATES"].dropna().values
-
-        # Calcul dynamique de `dt` à partir des différences entre les dates
-        date_deltas = np.diff(dates).astype('timedelta64[D]')  # Différences entre les dates en jours
-        average_delta_days = np.mean(date_deltas).astype(float)  # Pas moyen en jours
-        dt = average_delta_days / 365.0  # Conversion en années
-
-        # Calcul de `n_steps` : basé sur le nombre d'observations
-        n_steps = len(r) - 1  # Le nombre de pas correspond aux différences entre les observations
-
-        # Vérification que les taux et les pas de temps sont cohérents
-        if len(r) < 2 or np.isnan(dt):
-            raise ValueError("Les données fournies ne permettent pas un calcul cohérent des paramètres du modèle.")
-
-        # Appel à la méthode de classe pour calibration
-        return VasicekModel.calibrate(observed_yields=r, dt=dt, n_steps=n_steps, **kwargs)
-
 if __name__ == "__main__":
-    model = VasicekModel.calibrate_from_file("sofr")
-    print(model.theta, model.mu, model.sigma)
 
-    T = 5.0
-    n_paths = 10
+    from data.management.data_retriever import DataRetriever
+    from rate.interpolation import RateInterpolation
+    from rate.bootstrap import bootstrap_zero_curve
+    from utils import tenor_to_years
 
-    paths = model.simulate()
-    time_grid = np.linspace(0, T, paths.shape[1])
+    DR = DataRetriever("AMAZON")
 
-    plt.figure(figsize=(10, 6))
-    for i in range(n_paths):
-        plt.plot(time_grid, paths[i])
-    plt.title("Simulation du modèle Vasicek")
-    plt.xlabel("Temps (années)")
-    plt.ylabel("Taux court")
-    plt.axhline(model.mu, color='r', ls='--', label='Taux long terme (b)')
-    plt.legend()
-    plt.grid()
-    plt.show()
+    date = "2023-10-01"
+    curve = DR.get_risk_free_curve(date) / 100
+    spot = DR.get_risk_free_index(date) /100
+
+    maturity = np.array([tenor_to_years(t) for t in curve.index])
+   
+    zc = bootstrap_zero_curve(maturity, curve.values, freq=1)
+    
+    mat= np.arange(maturity[0], maturity[-1], 0.01)
+    rate = RateInterpolation(maturity, zc, kind="linear").yield_curve_array(mat)
+
+    
+    VM = VasicekModel.calibrate(rate, 0.01, 1000)
+    print(VM.theta, VM.mu, VM.sigma)
