@@ -99,17 +99,17 @@ if __name__ == "__main__":
 
     np.random.seed(272)
 
-    DR = DataRetriever("AMAZON")
+    DR = DataRetriever("LVMH")
 
     date = datetime(year=2023,month=10,day=1)
     curve = DR.get_risk_free_curve(date) / 100
-    spot = DR.get_risk_free_index(date) /100
-    maturity = np.array([tenor_to_years(t) for t in curve.index])
+    spot = DR.get_risk_free_index(date) / 100
+    maturity = np.array([tenor_to_years(tenor=t) for t in curve.index])
 
     zc = ZeroCouponCurveBuilder(maturity,curve.values)
 
     # --- Calibration des modèles ---
-    initial_guess_ns = [0.02, -0.01, 0.01, 2.0]
+    initial_guess_ns = [0.02, -0.01, 0.01, 1.5]
     params_ns = NelsonSiegelModel.calibrate(maturity, zc.zero_rates, np.array(initial_guess_ns))
 
     print("\nParamètres calibrés (Nelson-Siegel) :")

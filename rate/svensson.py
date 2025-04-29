@@ -117,7 +117,7 @@ if __name__ == "__main__":
 
     np.random.seed(272)
 
-    DR = DataRetriever("AMAZON")
+    DR = DataRetriever("LVMH")
 
     date = datetime(year=2023,month=10,day=1)
     curve = DR.get_risk_free_curve(date) / 100
@@ -128,11 +128,11 @@ if __name__ == "__main__":
 
     # --- Calibration du modèle ---
     initial_guess_sv = [0.02, -0.01, 0.01, 0.005, 1.5, 3.5]
-    params_ns = SvenssonModel.calibrate(maturity, zc.zero_rates, np.array(initial_guess_sv))
+    params_sv = SvenssonModel.calibrate(maturity, zc.zero_rates, np.array(initial_guess_sv))
 
     print("\nParamètres calibrés (Svensson) :")
     print(
-        f"beta0 = {params_ns.beta0:.4f}, beta1 = {params_ns.beta1:.4f}, beta2 = {params_ns.beta2:.4f},"
-        f", beta3 = {params_ns.beta3:.4f}, lambda1 = {params_ns.lambda1:.4f}, lambda2 = {params_ns.lambda2:.4f}")
+        f"beta0 = {params_sv.beta0:.4f}, beta1 = {params_sv.beta1:.4f}, beta2 = {params_sv.beta2:.4f},"
+        f", beta3 = {params_sv.beta3:.4f}, lambda1 = {params_sv.lambda1:.4f}, lambda2 = {params_sv.lambda2:.4f}")
 
-    params_ns.plot_fit(maturity, zc.zero_rates, title="Calibration du modèle Svensson")
+    params_sv.plot_fit(maturity, zc.zero_rates, title="Calibration du modèle Svensson")

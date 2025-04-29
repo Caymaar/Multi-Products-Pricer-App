@@ -3,6 +3,8 @@ import os
 import pandas as pd
 from pathlib import Path
 from typing import Union
+from datetime import datetime, timedelta
+from market.day_count_convention import DayCountConvention
 
 def get_config():
     # Obtenir le chemin absolu du répertoire racine du projet
@@ -78,10 +80,51 @@ def get_implied_vol(stock_name: str) -> pd.DataFrame:
     return df
 
 
-def tenor_to_years(tenor: str) -> float:
-    unit = tenor[-1]
-    n    = float(tenor[:-1])
-    if   unit == 'W': return n * 7/365
-    elif unit == 'M': return n * 30/365
-    elif unit == 'Y': return n
-    else:  raise ValueError(f"Unité inconnue : {unit}")
+def tenor_to_years(tenor: str, start_date: datetime.date = None, dcc: str = "Actual/360") -> float:
+    """
+    Convertit un tenor (ex: '6M') en fraction d'année en respectant la convention de décompte de jours.
+
+    :param tenor: Tenor sous forme de chaîne ('6M', '1Y', etc.)
+    :param start_date: Optionnel. Date de départ pour calcul réel
+    :param dcc: Convention de décompte de jours (ex: 'Actual/360', '30/360', etc.)
+    :return: float - fraction d'année
+    """
+    unit = tenor[-1].upper()
+    n = int(tenor[:-1])
+    convention = dcc.lower()
+
+    if start_date is not None:
+        from dateutil.relativedelta import relativedelta
+        dcc_obj = DayCountConvention(convention)
+        if unit == 'W':
+            end_date = start_date + timedelta(weeks=n)
+        elif unit == 'M':
+            end_date = start_date + relativedelta(months=n)
+        elif unit == 'Y':
+            end_date = start_date + relativedelta(years=n)
+        else:
+            raise ValueError(f"Unité de tenor inconnue : {unit}")
+        return dcc_obj.year_fraction(start_date, end_date)
+    else:
+        # Approche implicite selon la convention
+        if unit == 'W':
+            return (n * 7) / _days_in_year(convention)
+        elif unit == 'M':
+            return (n * 30) / _days_in_year(convention)
+        elif unit == 'Y':
+            return n
+        else:
+            raise ValueError(f"Unité de tenor inconnue : {unit}")
+
+def _days_in_year(convention: str) -> float:
+    """Retourne le nombre de jours par an selon la convention."""
+    if "actual/360" in convention:
+        return 360.0
+    elif "actual/365" in convention:
+        return 365.0
+    elif "30/360" in convention:
+        return 360.0
+    elif "actual/actual" in convention:
+        return 365.25  # moyenne approximative
+    else:
+        raise ValueError(f"Convention inconnue : {convention}")

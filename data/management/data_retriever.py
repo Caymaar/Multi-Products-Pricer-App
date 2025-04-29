@@ -12,6 +12,7 @@ import pandas as pd
 
 RATE_DICT = {
     "RFR": {"EU": "ESTER", "US": "SOFR"},
+    "FORWARD": {"EU": "EURIBOR"}
 }
 
 class DataRetriever:
@@ -22,6 +23,8 @@ class DataRetriever:
 
         self.risk_free_index = get_rate_data(RATE_DICT['RFR'][zone], "SPOT")
         self.risk_free_curve = get_rate_data(RATE_DICT['RFR'][zone], "CURVE")
+        self.floating_index = get_rate_data(RATE_DICT['FORWARD'][zone], "SPOT")
+        self.floating_curve = get_rate_data(RATE_DICT['FORWARD'][zone], "CURVE")
         try:
             self.implied = get_implied_vol(stock_name)
         except Exception as e:
@@ -36,7 +39,13 @@ class DataRetriever:
     
     def get_risk_free_curve(self, date: datetime):
         return self.risk_free_curve.iloc[self.risk_free_curve.index <= date].iloc[-1]
-    
+
+    def get_floating_index(self, date: datetime):
+        return self.floating_index.iloc[self.floating_index.index <= date].iloc[-1]
+
+    def get_floating_curve(self, date: datetime):
+        return self.floating_curve.iloc[self.floating_curve.index <= date].iloc[-1]
+
     def get_date_range(self):
         prices_range = (self.prices.index.min(), self.prices.index.max())
         spot_range = (self.risk_free_index.index.min(), self.risk_free_index.index.max())
