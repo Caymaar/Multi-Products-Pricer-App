@@ -69,9 +69,11 @@ class Bond(ABC, ScheduleMixin):
         """
         pass
 
-    def price(self, zc_curve) -> float:
+    def price(self, df_curve) -> float:
         zc_bonds = self.build_cashflows_as_zc()
-        return sum(zb.price(zc_curve) for zb in zc_bonds)
+        return sum(zb.price(df_curve) for zb in zc_bonds) / self.face_value * 100.0
+    
+
 
 
 # --- Zéro Coupon simple ---
@@ -86,12 +88,12 @@ class ZeroCouponBond(Bond):
     def build_cashflows_as_zc(self) -> list["ZeroCouponBond"]:
         return [self]
 
-    def price(self, zc_curve) -> float:
+    def price(self, df_curve) -> float:
         t = DayCountConvention(self.convention_days)\
             .year_fraction(self.pricing_date, self.maturity_date)
-        r = zc_curve(t)
-        return self.face_value * np.exp(-r * t)
-
+        df = df_curve(t)
+        return df * self.face_value
+        
 
 # --- Bond à taux fixe ---
 class FixedRateBond(Bond):
@@ -185,7 +187,7 @@ class ForwardRate:
         self.end_date = end_date
         self.dcc = DayCountConvention(convention_days)
 
-    def value(self, zc_curve) -> float:
+    def value(self, df_curve) -> float:
         """
         Taux forward discret implicite sur [t1, t2] :
            f = (DF(0→t1)/DF(0→t2) − 1) / (t2 − t1)
@@ -193,10 +195,11 @@ class ForwardRate:
         """
         t1 = self.dcc.year_fraction(self.pricing_date, self.start_date)
         t2 = self.dcc.year_fraction(self.pricing_date, self.end_date)
-        # zc_curve(t) renvoie r(0→t)
-        r1 = zc_curve(t1)
-        r2 = zc_curve(t2)
-        return (r2 * t2 - r1 * t1) / (t2 - t1)
+
+        df1 = df_curve(t1)
+        df2 = df_curve(t2)
+
+        return (-np.log(df2) + np.log(df1)) / (t2 - t1)
 
 class ForwardRateAgreement:
     """
@@ -219,7 +222,7 @@ class ForwardRateAgreement:
         self.convention_days = convention_days
         self.dcc = DayCountConvention(convention_days)
 
-    def fair_rate(self, zc_curve) -> float:
+    def fair_rate(self, df_curve) -> float:
         """
         Renvoie le taux forward continu implicite f sur [t1, t2].
         """
@@ -229,9 +232,9 @@ class ForwardRateAgreement:
             end_date = self.end_date,
             convention_days = self.convention_days
         )
-        return frwd.value(zc_curve)
+        return frwd.value(df_curve)
 
-    def mtm(self, zc_curve) -> float:
+    def mtm(self, df_curve) -> float:
         """
         Calcule la MtM du FRA aujourd'hui avec le strike K fixé.
         Utilise fair_rate() pour récupérer f_forward.
@@ -242,11 +245,11 @@ class ForwardRateAgreement:
         dt = t2 - t1
 
         # 2) taux forward implicite
-        fwd = self.fair_rate(zc_curve)
+        fwd = self.fair_rate(df_curve)
 
         # 3) factor d'actualisation continue jusque t2
-        r2  = zc_curve(t2)
-        DF2 = np.exp(-r2 * t2)
+        DF2  = df_curve(t2)
+
 
         # 4) MtM
         return self.notional * dt * (self.strike - fwd) * DF2
@@ -256,8 +259,8 @@ class ForwardRateAgreement:
 class InterestRateSwap(ScheduleMixin):
     """
     Swap payer-fixed vs receive-float:
-     • swap_rate(zc_curve) → par rate
-     • mtm(zc_curve)       → MtM aujourd’hui au fixed_rate choisi
+     • swap_rate(df_curve) → par rate
+     • mtm(df_curve)       → MtM aujourd’hui au fixed_rate choisi
     """
     def __init__(self,
                  notional:       float,
@@ -279,7 +282,7 @@ class InterestRateSwap(ScheduleMixin):
         self.forecasted_rates= forecasted_rates
         self.dcc = DayCountConvention(convention_days)
 
-    def _annuity(self, zc_curve) -> float:
+    def _annuity(self, df_curve) -> float:
         dates = self.generate_schedule(self.pricing_date,
                                           self.maturity_date,
                                           self.frequency)
@@ -287,13 +290,12 @@ class InterestRateSwap(ScheduleMixin):
                                          self.pricing_date,
                                          self.dcc.convention)
         dfs = np.array([
-            np.exp(-zc_curve(self.dcc.year_fraction(self.pricing_date, d))
-                   * self.dcc.year_fraction(self.pricing_date, d))
+            df_curve(self.dcc.year_fraction(self.pricing_date, d))
             for d in dates
         ])
         return float(np.sum(accruals * dfs))
 
-    def _pv_float_leg(self, zc_curve) -> float:
+    def _pv_float_leg(self, df_curve) -> float:
         """
         PV de la jambe flottante = Σ_j N·(multiplier·L_j + margin)·Δ_j·DF(0→t_j)
         où L_j est soit forecasted_rates[j], soit calculé par :
@@ -309,13 +311,13 @@ class InterestRateSwap(ScheduleMixin):
         # On calcule les factors d'actualisation
         t_js = np.array([self.dcc.year_fraction(self.pricing_date, d)
                          for d in dates])
-        dfs = np.exp(-np.vectorize(zc_curve)(t_js) * t_js)
+        dfs = np.vectorize(df_curve)(t_js)
 
         # 1) forward implicites si pas de forecasted_rates
         if self.forecasted_rates is None:
             # on a besoin aussi des DF(t_{j-1})
             t_jm1 = np.concatenate([[0.0], t_js[:-1]])
-            df_jm1 = np.exp(-np.vectorize(zc_curve)(t_jm1) * t_jm1)
+            df_jm1 = np.vectorize(df_curve)(t_jm1)
             forwards = (df_jm1/dfs - 1) / accruals
         else:
             forwards = np.array(self.forecasted_rates)
@@ -327,24 +329,24 @@ class InterestRateSwap(ScheduleMixin):
         # 3) PV = somme des payments actualisés
         return float(np.sum(payments * dfs))
 
-    def swap_rate(self, zc_curve) -> float:
+    def swap_rate(self, df_curve) -> float:
         """
         Par rate pur = (1-DF(T)) / Σ Δ_j·DF(t_j)
         """
         T = self.dcc.year_fraction(self.pricing_date, self.maturity_date)
-        DFt = np.exp(-zc_curve(T) * T)
-        A = self._annuity(zc_curve)
+        DFt = df_curve(T)
+        A = self._annuity(df_curve)
         return (1 - DFt) / A
 
-    def mtm(self, zc_curve) -> float:
+    def mtm(self, df_curve) -> float:
         """
         MtM = PV_float_leg(total) – PV_fixed_leg
         si fixed_rate=None, on prend swap_rate ⇒ MtM≈0
         """
-        R = self.fixed_rate if self.fixed_rate is not None else self.swap_rate(zc_curve)
-        A = self._annuity(zc_curve)
+        R = self.fixed_rate if self.fixed_rate is not None else self.swap_rate(df_curve)
+        A = self._annuity(df_curve)
         pv_fixed = self.notional * R * A
-        pv_float = self._pv_float_leg(zc_curve)
+        pv_float = self._pv_float_leg(df_curve)
         return float(pv_float - pv_fixed)
 
 # Usage exemple

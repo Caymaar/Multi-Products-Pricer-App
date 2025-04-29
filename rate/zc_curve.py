@@ -4,6 +4,9 @@ from rate.nelson_siegel import NelsonSiegelModel
 from rate.svensson import SvenssonModel
 import numpy as np
 from datetime import datetime
+from data.management.data_retriever import DataRetriever
+from utils import tenor_to_years
+import pandas as pd
 
 class ZeroCouponCurveBuilder:
     def __init__(self, taus, swap_rates, freq=1):
@@ -73,19 +76,18 @@ class ZeroCouponCurveBuilder:
 
 
 class ZCFactory:
-    def __init__(self, source: str = "AMAZON", date: datetime = datetime(year=2023,month=10,day=1), dcc="Actual/365"):
-        self.retriever = DataRetriever(source)
-        self.date = date
+    def __init__(self, risk_free_curve: pd.Series, floating_curve: pd.Series, dcc="Actual/365"):
+        self.risk_free_curve = risk_free_curve
+        self.floating_curve = floating_curve
         self.dcc = dcc
 
-    def get_maturity_and_rates(self, date: datetime, curve_type: str = 'discount', dcc="Actual/365"):
-        curve_df = self.retriever.get_risk_free_curve(date) / 100 if curve_type == 'discount' else self.retriever.get_floating_curve(date)
+    def get_maturity_and_rates(self, curve_type: str = 'discount', dcc="Actual/365"):
+        curve_df = self.risk_free_curve if curve_type == 'discount' else self.floating_curve 
         maturities = np.array([tenor_to_years(tenor=t, dcc=dcc) for t in curve_df.index])
         rates = curve_df.values
         return maturities, rates
 
     def make_zc_curve(self,
-             date: datetime,
              method: str = "interpolation",
              curve_type: str = "discount",
              dcc:str = "Actual/360",
@@ -103,11 +105,11 @@ class ZCFactory:
         :return: instance d'une courbe implémentant AbstractYieldCurve
         """
         method = method.lower()
-        maturities, rates = self.get_maturity_and_rates(date, curve_type, dcc=dcc)
+        maturities, rates = self.get_maturity_and_rates(curve_type, dcc=dcc)
         builder = ZeroCouponCurveBuilder(maturities, rates)
         return builder.build_curve(method=method,**kwargs)
 
-    def discount_curve(self, date: datetime = None, method: str = "interpolation", **kwargs):
+    def discount_curve(self, method: str = "interpolation", **kwargs):
         """
         Renvoie une fonction DF(t) pour actualiser des flux, à partir de la courbe ZC calibrée.
 
@@ -116,9 +118,7 @@ class ZCFactory:
         :param kwargs: paramètres du modèle
         :return: fonction DF(t) = exp(-r(t) * t)
         """
-        if date is None:
-            date = self.date
-        zc_curve = self.make_zc_curve(date=date, method=method,curve_type='discount', **kwargs)
+        zc_curve = self.make_zc_curve(method=method,curve_type='discount', **kwargs)
 
         def discount_factor(t: float) -> float:
             r = zc_curve.yield_value(t)
@@ -126,7 +126,7 @@ class ZCFactory:
 
         return discount_factor
 
-    def forward_curve(self, date: datetime = None, method: str = "interpolation", **kwargs):
+    def forward_curve(self, method: str = "interpolation", **kwargs):
         """
         Renvoie une fonction f(t1, t2) donnant le taux forward implicite projeté (ex. Euribor 3M).
 
@@ -135,15 +135,27 @@ class ZCFactory:
         :param kwargs: paramètres du modèle
         :return: fonction f(t1, t2)
         """
-        if date is None:
-            date = self.date
-        zc_curve = self.make_zc_curve(date=date, method=method,curve_type='forward', **kwargs)
+        zc_curve = self.make_zc_curve(method=method,curve_type='forward', **kwargs)
 
-        def forward_rate(t1: float, t2: float) -> float:
-            return zc_curve.forward_rate(t1, t2)
+        return zc_curve.forward_rate
 
-        return forward_rate
+    def get_discound_and_forward_curves(self, method: str = "interpolation", **kwargs):
+        """
+        Renvoie une fonction DF(t) pour actualiser des flux et une fonction f(t1, t2) pour le taux forward.
 
+        :param method: méthode de calibration (interpolation, nelson-siegel, etc.)
+        :param kwargs: paramètres du modèle
+        :return: tuple (fonction DF(t), fonction f(t1, t2))
+        """
+        zc_curve = self.make_zc_curve(method=method,curve_type='discount', **kwargs)
+
+        def discount_factor(t: float) -> float:
+            r = zc_curve.yield_value(t)
+            return np.exp(-r * t)
+
+        fwd_curve = self.make_zc_curve(method=method,curve_type='forward', **kwargs)
+
+        return discount_factor, fwd_curve.forward_rate
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt

@@ -38,13 +38,13 @@ class DataRetriever:
         return self.risk_free_index.iloc[self.risk_free_index.index <= date].iloc[-1]
     
     def get_risk_free_curve(self, date: datetime):
-        return self.risk_free_curve.iloc[self.risk_free_curve.index <= date].iloc[-1]
+        return self.risk_free_curve.iloc[self.risk_free_curve.index <= date].iloc[-1] / 100
 
     def get_floating_index(self, date: datetime):
         return self.floating_index.iloc[self.floating_index.index <= date].iloc[-1]
 
     def get_floating_curve(self, date: datetime):
-        return self.floating_curve.iloc[self.floating_curve.index <= date].iloc[-1]
+        return self.floating_curve.iloc[self.floating_curve.index <= date].iloc[-1] / 100
 
     def get_date_range(self):
         prices_range = (self.prices.index.min(), self.prices.index.max())
