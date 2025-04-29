@@ -2,9 +2,9 @@ from abc import ABC, abstractmethod
 import numpy as np
 
 # ---------------- Courbe des taux ----------------
-class AbstractRateModel(ABC):
+class AbstractYieldCurve(ABC):
     @abstractmethod
-    def yield_value(self, maturity):
+    def yield_value(self, maturity) -> float:
         """
         Calcule le taux pour une échéance donnée tau.
 
@@ -13,7 +13,7 @@ class AbstractRateModel(ABC):
         """
         pass
 
-    def yield_curve_array(self, maturities):
+    def yield_curve_array(self, maturities: np.ndarray) -> np.ndarray:
         """
         Calcule la courbe des taux pour un tableau d'échéances.
 
@@ -21,6 +21,28 @@ class AbstractRateModel(ABC):
         :return: array-like, les taux correspondants
         """
         return np.array([self.yield_value(t) for t in maturities])
+
+    def forward_rate(self, t1: float, t2: float) -> float:
+        """Forward discret basé sur les taux zéro."""
+        z1 = self.yield_value(t1)
+        z2 = self.yield_value(t2)
+        return (z2 * t2 - z1 * t1) / (t2 - t1)
+
+    def instantaneous_forward(self, t: float, h: float = 1e-4) -> float:
+        """Forward instantané par dérivation centrale."""
+        z1 = self.yield_value(t - h)
+        z2 = self.yield_value(t + h)
+        dzdt = (z2 - z1) / (2 * h)
+        return self.yield_value(t) + t * dzdt
+
+    def discount_factor(self, t: float) -> float:
+        return np.exp(-self.yield_value(t) * t)
+
+    def forward_from_zc_ratio(self, t1: float, t2: float) -> float:
+        """Méthode alternative basée sur les facteurs d'actualisation (ton approche)."""
+        df1 = self.discount_factor(t1)
+        df2 = self.discount_factor(t2)
+        return (df1 / df2 - 1) / (t2 - t1)
 
     @abstractmethod
     def calibrate(self, **kwargs):
@@ -36,3 +58,4 @@ class AbstractRateModel(ABC):
         :return: array-like, les paramètres calibrés
         """
         pass
+

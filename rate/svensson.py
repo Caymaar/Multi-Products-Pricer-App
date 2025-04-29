@@ -1,9 +1,9 @@
 import numpy as np
 from scipy.optimize import minimize
 import plotly.graph_objects as go
-from rate.abstract_taux import AbstractRateModel
+from rate.abstract_taux import AbstractYieldCurve
 
-class SvenssonModel(AbstractRateModel):
+class SvenssonModel(AbstractYieldCurve):
     def __init__(self,
                  beta0: float,
                  beta1: float,
@@ -48,7 +48,7 @@ class SvenssonModel(AbstractRateModel):
     def calibrate(cls,
                   maturities: np.ndarray,
                   observed_yields: np.ndarray,
-                  initial_guess: list) -> 'SvenssonModel':
+                  initial_guess: np.ndarray) -> 'SvenssonModel':
         """
         Calibre les paramètres du modèle Svensson et renvoie une instance calibrée.
 
@@ -109,24 +109,30 @@ class SvenssonModel(AbstractRateModel):
         fig.show()
 
 if __name__ == "__main__":
-    np.random.seed(123)
-    # --- Chargement et nettoyage des données ---
-    data = pd.read_excel("../data_taux/RateCurve_temp.xlsx")
 
-    maturities_raw = data['Matu'].values
-    observed_yields = data['Rate'].values
+    from data.management.data_retriever import DataRetriever
+    from rate.zc_curve import ZeroCouponCurveBuilder
+    from datetime import datetime
+    from utils import tenor_to_years
 
-    # --- Calibration du modèle Svensson ---
-    initial_guess_sv = [2.5, -1.0, 0.5, 0.3, 1.0, 2.0]
-    svensson_model = SvenssonModel(beta0=initial_guess_sv[0], beta1=initial_guess_sv[1],
-                                   beta2=initial_guess_sv[2], beta3=initial_guess_sv[3],
-                                   lambda1=initial_guess_sv[4], lambda2=initial_guess_sv[5],
-                                   maturities=maturities_raw, observed_yields=observed_yields,
-                                   initial_guess=initial_guess_sv)
-    params_sv = svensson_model.params
+    np.random.seed(272)
+
+    DR = DataRetriever("AMAZON")
+
+    date = datetime(year=2023,month=10,day=1)
+    curve = DR.get_risk_free_curve(date) / 100
+    spot = DR.get_risk_free_index(date) /100
+    maturity = np.array([tenor_to_years(t) for t in curve.index])
+
+    zc = ZeroCouponCurveBuilder(maturity,curve.values)
+
+    # --- Calibration du modèle ---
+    initial_guess_sv = [0.02, -0.01, 0.01, 0.005, 1.5, 3.5]
+    params_ns = SvenssonModel.calibrate(maturity, zc.zero_rates, np.array(initial_guess_sv))
+
     print("\nParamètres calibrés (Svensson) :")
-    print(f"beta0 = {params_sv[0]:.4f}, beta1 = {params_sv[1]:.4f}, beta2 = {params_sv[2]:.4f}, "
-          f"beta3 = {params_sv[3]:.4f}, lambda1 = {params_sv[4]:.4f}, lambda2 = {params_sv[5]:.4f}")
+    print(
+        f"beta0 = {params_ns.beta0:.4f}, beta1 = {params_ns.beta1:.4f}, beta2 = {params_ns.beta2:.4f},"
+        f", beta3 = {params_ns.beta3:.4f}, lambda1 = {params_ns.lambda1:.4f}, lambda2 = {params_ns.lambda2:.4f}")
 
-    # --- Affichage des courbes de taux (plot fit) ---
-    svensson_model.plot_fit(maturities_raw, observed_yields)
+    params_ns.plot_fit(maturity, zc.zero_rates, title="Calibration du modèle Svensson")

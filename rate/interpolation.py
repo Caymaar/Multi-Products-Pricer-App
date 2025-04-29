@@ -1,7 +1,9 @@
 import numpy as np
 from scipy.interpolate import interp1d
 
-class RateInterpolation:
+from rate.abstract_taux import AbstractYieldCurve
+
+class RateInterpolation(AbstractYieldCurve):
     def __init__(self, x, y, kind='linear'):
         """
         Initialise l'interpolateur.
@@ -77,3 +79,31 @@ class RateInterpolation:
         Calcule la courbe des taux interpolés pour un tableau d'échéances.
         """
         return np.array([self.yield_value(t) for t in maturities])
+
+    def calibrate(self):
+        pass # Pas de calibration ici
+
+if __name__ == "__main__":
+    from data.management.data_retriever import DataRetriever
+    from rate.zc_curve import ZeroCouponCurveBuilder
+    from datetime import datetime
+    from utils import tenor_to_years
+    from matplotlib import pyplot as plt
+
+    np.random.seed(272)
+
+    DR = DataRetriever("AMAZON")
+
+    date = datetime(year=2023, month=10, day=1)
+    curve = DR.get_risk_free_curve(date) / 100
+    spot = DR.get_risk_free_index(date) / 100
+    maturity = np.array([tenor_to_years(t) for t in curve.index])
+
+    zc = ZeroCouponCurveBuilder(maturity, curve.values)
+
+    # --- Calibration du modèle ---
+    initial_guess_sv = [0.02, -0.01, 0.01, 0.005, 1.5, 3.5]
+    interp = RateInterpolation(maturity, zc.zero_rates, "refined cubic")
+
+    rate_curve = interp.yield_curve_array(maturity)
+    plt.plot(maturity, rate_curve, label="Interpolation cubique")

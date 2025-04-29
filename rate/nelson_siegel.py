@@ -2,10 +2,10 @@ import pandas as pd
 import numpy as np
 from scipy.optimize import minimize
 import plotly.graph_objects as go
-from rate.abstract_taux import AbstractRateModel
+from rate.abstract_taux import AbstractYieldCurve
 
 
-class NelsonSiegelModel(AbstractRateModel):
+class NelsonSiegelModel(AbstractYieldCurve):
     def __init__(self, beta0: float, beta1: float, beta2: float, lambda1: float):
         """
         Initialisation du modèle Nelson-Siegel.
@@ -36,7 +36,7 @@ class NelsonSiegelModel(AbstractRateModel):
     def calibrate(cls,
                   maturities: np.ndarray,
                   observed_yields: np.ndarray,
-                  initial_guess: list) -> 'NelsonSiegelModel':
+                  initial_guess: np.ndarray) -> 'NelsonSiegelModel':
         """
         Calibre les paramètres du modèle Nelson-Siegel et renvoie une instance configurée.
 
@@ -91,21 +91,29 @@ class NelsonSiegelModel(AbstractRateModel):
 
 
 if __name__ == "__main__":
-    np.random.seed(123)
-    data = pd.read_excel("../data_taux/RateCurve_temp.xlsx")
-    maturities_raw = data['Matu'].values
-    observed_yields = data['Rate'].values
+
+    from data.management.data_retriever import DataRetriever
+    from rate.zc_curve import ZeroCouponCurveBuilder
+    from datetime import datetime
+    from utils import tenor_to_years
+
+    np.random.seed(272)
+
+    DR = DataRetriever("AMAZON")
+
+    date = datetime(year=2023,month=10,day=1)
+    curve = DR.get_risk_free_curve(date) / 100
+    spot = DR.get_risk_free_index(date) /100
+    maturity = np.array([tenor_to_years(t) for t in curve.index])
+
+    zc = ZeroCouponCurveBuilder(maturity,curve.values)
 
     # --- Calibration des modèles ---
-    initial_guess_ns = [4.0, -1.0, 0.5, 2]
-    ns_model = NelsonSiegelModel(beta0=initial_guess_ns[0],
-                                 beta1=initial_guess_ns[1],
-                                 beta2=initial_guess_ns[2],
-                                 lambda1=initial_guess_ns[3])
-    params_ns = ns_model.calibrate(maturities_raw, observed_yields, initial_guess_ns)
+    initial_guess_ns = [0.02, -0.01, 0.01, 2.0]
+    params_ns = NelsonSiegelModel.calibrate(maturity, zc.zero_rates, np.array(initial_guess_ns))
 
     print("\nParamètres calibrés (Nelson-Siegel) :")
     print(
-        f"beta0 = {params_ns[0]:.4f}, beta1 = {params_ns[1]:.4f}, beta2 = {params_ns[2]:.4f}, lambda1 = {params_ns[3]:.4f}")
+        f"beta0 = {params_ns.beta0:.4f}, beta1 = {params_ns.beta1:.4f}, beta2 = {params_ns.beta2:.4f}, lambda1 = {params_ns.lambda1:.4f}")
 
-    ns_model.plot_fit(maturities_raw, observed_yields, title="Calibration du modèle Nelson-Siegel")
+    params_ns.plot_fit(maturity, zc.zero_rates, title="Calibration du modèle Nelson-Siegel")

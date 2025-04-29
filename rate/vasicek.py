@@ -1,16 +1,10 @@
-import numpy as np
-from rate.abstract_taux import AbstractRateModel
-from rate.bootstrap import bootstrap_zero_curve
-import matplotlib.pyplot as plt
+from rate.abstract_taux import AbstractYieldCurve
 from stochastic_process.ou_process import OUProcess
 from typing import Union
-import pandas as pd
 import numpy as np
-from scipy.optimize import minimize
-import os
 
 
-class VasicekModel(AbstractRateModel, OUProcess):
+class VasicekModel(AbstractYieldCurve, OUProcess):
     """
     Modèle de taux court de Vasicek basé sur le processus d'Ornstein-Uhlenbeck.
     Hérite de OUProcess pour intégrer les méthodes de simulation.
@@ -91,23 +85,22 @@ class VasicekModel(AbstractRateModel, OUProcess):
 if __name__ == "__main__":
 
     from data.management.data_retriever import DataRetriever
-    from rate.interpolation import RateInterpolation
-    from rate.bootstrap import bootstrap_zero_curve
+    from zc_curve import ZeroCouponCurveBuilder
     from utils import tenor_to_years
+    from datetime import datetime
 
     DR = DataRetriever("AMAZON")
 
-    date = "2023-10-01"
+    date = datetime(year=2023,month=10,day=1)
     curve = DR.get_risk_free_curve(date) / 100
     spot = DR.get_risk_free_index(date) /100
 
     maturity = np.array([tenor_to_years(t) for t in curve.index])
-   
-    zc = bootstrap_zero_curve(maturity, curve.values, freq=1)
-    
-    mat= np.arange(maturity[0], maturity[-1], 0.01)
-    rate = RateInterpolation(maturity, zc, kind="linear").yield_curve_array(mat)
+    mat = np.arange(maturity[0], maturity[-1], 0.01)
 
-    
-    VM = VasicekModel.calibrate(rate, 0.01, 1000)
+    zc = ZeroCouponCurveBuilder(maturity, curve.values, freq=1)
+
+    zc_rates = zc.build_curve(method='interpolation',kind='refined cubic').yield_curve_array(mat)
+
+    VM = VasicekModel.calibrate(zc_rates, 0.01, 1000)
     print(VM.theta, VM.mu, VM.sigma)

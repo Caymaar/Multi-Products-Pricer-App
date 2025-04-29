@@ -142,7 +142,10 @@
     # plt.tight_layout()
     # plt.show()
 
+from abc import ABC, abstractmethod
 import numpy as np
+
+from rate.abstract_taux import AbstractYieldCurve
 from rate.interpolation import RateInterpolation
 from rate.nelson_siegel import NelsonSiegelModel
 from rate.svensson import SvenssonModel
@@ -180,6 +183,7 @@ class ZeroCouponCurveBuilder:
                 dfs[i] = (1.0 - fixed_pv) / (1.0 + c * dt)
         self.dfs = dfs
         self.zero_rates = -np.log(dfs) / self.taus
+
 
     def build_curve(self,
                     method: str = 'interpolation',
@@ -237,6 +241,9 @@ class InterpolatedZCCurve:
     def zero_curve(self, maturities: np.ndarray) -> np.ndarray:
         return self.interp.yield_curve_array(maturities)
 
+    def calibrate(self, **kwargs):
+        pass # pas de calibration ici
+
 
 class ParametricZCCurve:
     """
@@ -276,13 +283,14 @@ if __name__ == "__main__":
 
     from data.management.data_retriever import DataRetriever
     from rate.interpolation import RateInterpolation
+    from datetime import datetime
     from rate.bootstrap import bootstrap_zero_curve
     from utils import tenor_to_years
     import matplotlib.pyplot as plt
 
     DR = DataRetriever("AMAZON")
 
-    date = "2023-10-01"
+    date = datetime(year=2023,month=10,day=1)
     curve = DR.get_risk_free_curve(date) / 100
     spot = DR.get_risk_free_index(date) /100
 
@@ -297,8 +305,6 @@ if __name__ == "__main__":
         "Svensson": make_zc_curve(maturity, curve.values, method="svensson", initial_guess=sv_guess),
         #"Vasicek": make_zc_curve(maturity, curve.values, method="vasicek", dt=1, n_steps=10),
         }
-    
-
 
     mat= np.arange(maturity[0], maturity[-1], 0.01)
     # Tracé des courbes
