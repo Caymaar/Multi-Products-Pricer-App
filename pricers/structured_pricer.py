@@ -1,8 +1,7 @@
 import numpy as np
 from typing import Tuple, List
 from datetime import datetime
-from rate.curve_utils import make_zc_curve
-from rate.products import ZeroCouponBond
+from rate.product import ZeroCouponBond
 from option.option import Option, OptionPortfolio
 from market.market import Market
 from stochastic_process.gbm_process import GBMProcess
@@ -13,16 +12,15 @@ class StructuredPricer:
     def __init__(self,
                  market: Market,
                  pricing_date: datetime,
-                 zc_method: str,
-                 zc_args: tuple,
+                 df_curve,
                  n_paths: int = 100_000,
                  n_steps: int = 300,
                  seed: int = None,
                  compute_antithetic: bool = False):
         self.market = market
         self.pricing_date = pricing_date
-        self.zc_curve = make_zc_curve(zc_method, *zc_args)
-        self.dcc = market.DaysCountConvention
+        self.df_curve = df_curve
+        self.dcc = market.dcc
         # paramètres pour simuler le sous-jacent
         self.n_paths = n_paths
         self.n_steps = n_steps
@@ -44,7 +42,7 @@ class StructuredPricer:
         )
 
     def price_zcb(self, zcb: ZeroCouponBond) -> float:
-        return zcb.price(self.zc_curve)
+        return zcb.price(self.df_curve)
 
     def simulate_underlying(self,
                             maturity_date: datetime,
@@ -129,9 +127,9 @@ class StructuredPricer:
         # return CF matrix and times including maturity
         return cashflows, times
 
-    def discount(self,
+    def discount_cf(self,
                  cashflows: np.ndarray,
                  times:     np.ndarray
                 ) -> np.ndarray:
-        dfs = np.array([self.zc_curve(t) for t in times])
+        dfs = np.array([self.df_curve(t) for t in times])
         return cashflows * dfs

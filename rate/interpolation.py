@@ -84,10 +84,11 @@ class RateInterpolation(AbstractYieldCurve):
         pass # Pas de calibration ici
 
 if __name__ == "__main__":
+
     from data.management.data_retriever import DataRetriever
     from rate.zc_curve import ZeroCouponCurveBuilder
     from datetime import datetime
-    from utils import tenor_to_years
+    from data.management.data_utils import tenor_to_years
     from matplotlib import pyplot as plt
 
     np.random.seed(272)

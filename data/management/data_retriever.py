@@ -5,7 +5,7 @@ import os
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
 sys.path.append(project_root)
 
-from utils import get_price_data, get_rate_data, get_implied_vol, get_zone
+from data.management.data_utils import get_price_data, get_rate_data, get_implied_vol, get_zone
 import numpy as np
 from datetime import datetime
 import pandas as pd
@@ -56,7 +56,7 @@ class DataRetriever:
         
         return common_min, common_max
     
-    def get_implied_volatility(self, date: str = None):
+    def get_implied_volatility(self, date: datetime = None):
         return self.implied
     
     def get_correlation(self, date: datetime, maturity: datetime):
@@ -75,7 +75,14 @@ class DataRetriever:
         merged_df = merged_df.diff()
         merged_df = merged_df.dropna()
 
-        return merged_df.corr().iloc[0, 1]
+        return merged_df.corr()
+
+    def get_historical_volatility(self, date: datetime, window: int = 252) -> float:
+        # log‐returns journaliers
+        rets = np.log(self.prices / self.prices.shift(1)).dropna()
+        # volatilité annualisée sur la fenêtre précédente
+        hist = rets.loc[:date].tail(window).std() * np.sqrt(window)
+        return hist
 
 
 if __name__ == "__main__":

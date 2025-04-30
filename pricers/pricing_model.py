@@ -15,7 +15,6 @@ class Engine(ABC):
         self.n_steps = n_steps
         self.T = self._calculate_T()
         self.dt = self.T / n_steps
-        self.df = np.exp(-self.market.r * self.dt)
         self.t_div = self._calculate_t_div()
         # ** instanciation des BS pricer **
         self._init_bsm()
@@ -25,14 +24,14 @@ class Engine(ABC):
         Méthode pour calculer les temps jusqu'à l'expiration des options (T).
         Retourne un array des durées en années entre la date de pricing et les dates de maturité.
         """
-        return np.array([self.market.DaysCountConvention.year_fraction(start_date=self.pricing_date, end_date=option.T) for option in self.options.assets])
+        return np.array([self.market.dcc.year_fraction(start_date=self.pricing_date, end_date=option.T) for option in self.options.assets])
 
     def _calculate_t_div(self):
         """
         Calcule l'indice temporel pour le dividende si le dividende est discret.
         """
         if self.market.div_type == "discrete" and self.market.div_date is not None:
-            T_div = self.market.DaysCountConvention.year_fraction(start_date=self.pricing_date,end_date=self.market.div_date) # Conversion en année
+            T_div = self.market.dcc.year_fraction(start_date=self.pricing_date,end_date=self.market.div_date) # Conversion en année
             return int(T_div/self.dt)  # Conversion en indice de pas de temps
         else:
             return None

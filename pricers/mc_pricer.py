@@ -12,7 +12,7 @@ from typing import List, Tuple, Dict
 # ---------------- Classe MCModel ----------------
 class MonteCarloEngine(Engine):
     def __init__(self, market: Market, option_ptf: OptionPortfolio, pricing_date: datetime, n_paths: int, n_steps: int,
-                 seed=None, ex_frontier="Quadratic", correlation_matrix=None, compute_antithetic=True):
+                 seed=None, ex_frontier="Quadratic", compute_antithetic=True):
         super().__init__(market, option_ptf, pricing_date, n_steps)
         self.n_paths = n_paths
         self.reg_type = ex_frontier
@@ -23,7 +23,7 @@ class MonteCarloEngine(Engine):
         self.diffusions = {}  # Stocke les processus de diffusion pour chaque option
         for option, dt in zip(self.options.assets, self.dt):
             self.diffusions[option.name] = GBMProcess(market=self.market, dt=dt, n_paths=self.n_paths, n_steps=self.n_steps,
-                                                     t_div=self.t_div, compute_antithetic=compute_antithetic, seed=seed, correlation_matrix=correlation_matrix)
+                                                     t_div=self.t_div, compute_antithetic=compute_antithetic, seed=seed)
 
     def _price_american_lsm(self, paths, option, idx: int, analysis=False) -> Tuple[np.ndarray, List[float]]:
         """
@@ -42,18 +42,25 @@ class MonteCarloEngine(Engine):
         # Extraire T_i, dt_i, df_i pour cette option
         T_i = self.T[idx]
         dt_i = T_i / self.n_steps
-        df_i = np.exp(-self.market.r * dt_i)
+
+        discount = self.market.discount_factor  # callable DF(0→t)
+
+        # Précompute step discounts : df_j = P(0→(j+1)dt)/P(0→j dt)
+        step_dfs = [
+            discount((t + 1) * dt_i) / discount(t * dt_i)
+            for t in range(self.n_steps)
+        ]
 
         # Payoff final brut
         CF = option.intrinsic_value(paths)
 
         # --- Analyse du pricing backward dans LSM ---
         if analysis:
-            price_by_time = CF.mean() * np.exp(-self.market.r * T_i)
+            price_by_time = CF.mean()
 
         # --- Backward induction ---
-        for t in range(self.n_steps - 1, 0, -1):
-            CF *= df_i  # actualisation
+        for t in range(self.n_steps - 1, -1, -1):
+            CF = CF * step_dfs[t] # actualisation d'un pas
 
             # Valeur immédiate
             immediate = option.intrinsic_value(paths[:, :t + 1])
@@ -71,11 +78,10 @@ class MonteCarloEngine(Engine):
                 CF[in_money] = np.where(exercise, immediate[in_money], Y)
 
             if analysis:
-                time_remaining = t * dt_i
-                price_by_time.append(CF.mean() * np.exp(-self.market.r * time_remaining))
+                t_j = t * dt_i
+                price_by_time.append(CF.mean() * discount(t_j))
 
-        CF = CF * df_i
-        return CF, price_by_time
+        return CF, price_by_time if analysis else CF
 
     def american_price(self) -> np.ndarray:
         """
@@ -114,7 +120,7 @@ class MonteCarloEngine(Engine):
 
         for id, option in enumerate(self.options.assets):
             payoffs[option.name] = option.intrinsic_value(paths[option.name]).astype(float) # Payoff à maturité
-            payoffs[option.name] *= np.exp(-self.market.r * self.T[id]) # Actualisation
+            payoffs[option.name] *= np.exp(-self.market.zero_rate(self.T[id]) * self.T[id]) # Actualisation
 
         return payoffs
 
@@ -163,6 +169,8 @@ class MonteCarloEngine(Engine):
         CI_lower = mean_price - CI_half_width
         CI_upper = mean_price + CI_half_width
 
+        CI_upper = CI_upper[-1] if len(CI_upper)==1 else CI_upper
+        CI_lower = CI_lower[-1] if len(CI_lower)==1 else CI_lower
         return CI_upper, CI_lower
     
     def price(self, type="MC"):

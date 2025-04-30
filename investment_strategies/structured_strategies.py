@@ -1,7 +1,7 @@
 from investment_strategies.abstract_strategy import Strategy
 from pricers.structured_pricer import StructuredPricer
 import numpy as np
-from rate.products import ZeroCouponBond
+from rate.product import ZeroCouponBond
 from option.option import Option, Call, Put, DigitalCall, UpAndOutCall, DownAndOutPut
 from datetime import datetime
 from typing import List
@@ -40,7 +40,7 @@ class StructuredProduct(Strategy):
         if m > 0 and invested > 0:
             for opt, sign in opt_legs:
                 engine = pricer.get_mc_engine(opt)
-                p = float(engine.price(type="MC")[0])
+                p = engine.price(type="MC")
                 #qty = (invested/m)/p if p > 0 else 0.0
                 total += sign * p # * qty * p
         return total
@@ -85,8 +85,9 @@ class Autocallable(StructuredProduct):
             self.notional
         )
         # actualisation colonne par colonne
-        zero_rates = np.array([pricer.zc_curve(t) for t in times])
-        discounted = cashflows * np.exp(- zero_rates * times)
+        #zero_rates = np.array([pricer.df_curve(t) for t in times])
+        #discounted = cashflows * np.exp(- zero_rates * times)
+        discounted = pricer.discount_cf(cashflows=cashflows,times=times)
         return float(discounted.sum(axis=1).mean())
 
 
@@ -135,7 +136,7 @@ class ReverseConvertible(StructuredProduct):
 
     def get_legs(self):
         return [
-            (ZeroCouponBond(face_value=self.notional, maturity=self.ttm), +1.0),
+            (ZeroCouponBond(face_value=self.notional, pricing_date=self.pricing_date, maturity_date=self.maturity_date), +1.0),
             (Put(self.K, self.maturity_date), -1.0)
         ]
 
@@ -156,7 +157,7 @@ class TwinWin(StructuredProduct):
 
     def get_legs(self):
         return [
-            (ZeroCouponBond(face_value=self.notional, maturity=self.ttm), +1.0),
+            (ZeroCouponBond(face_value=self.notional, pricing_date=self.pricing_date, maturity_date=self.maturity_date), +1.0),
             (UpAndOutCall(self.K, self.maturity_date, self.CUO_barrier), +1.0),
             (DownAndOutPut(self.K, self.maturity_date, self.PDO_barrier), +1.0)
         ]
@@ -176,7 +177,7 @@ class BonusCertificate(StructuredProduct):
 
     def get_legs(self):
         return [
-            (ZeroCouponBond(face_value=self.notional, maturity=self.ttm), +1.0),
+            (ZeroCouponBond(face_value=self.notional, pricing_date=self.pricing_date, maturity_date=self.maturity_date), +1.0),
             (Call(self.K, self.maturity_date), +1.0),
             (DownAndOutPut(self.K, self.maturity_date, self.barrier), -1.0)
         ]
@@ -196,7 +197,7 @@ class CappedParticipationCertificate(StructuredProduct):
 
     def get_legs(self):
         return [
-            (ZeroCouponBond(face_value=self.notional, maturity=self.ttm), +1.0),
+            (ZeroCouponBond(face_value=self.notional, pricing_date=self.pricing_date, maturity_date=self.maturity_date), +1.0),
             (Call(self.K, self.maturity_date), +1.0),
             (DigitalCall(self.K, self.maturity_date, "european", payoff=self.cap - self.K), +1.0)
         ]
@@ -214,7 +215,7 @@ class DiscountCertificate(StructuredProduct):
 
     def get_legs(self):
         return [
-            (ZeroCouponBond(face_value=self.notional, maturity=self.ttm), +1.0),
+            (ZeroCouponBond(face_value=self.notional, pricing_date=self.pricing_date, maturity_date=self.maturity_date), +1.0),
             (Put(self.K, self.maturity_date), -1.0)
         ]
 
@@ -233,7 +234,7 @@ class ReverseConvertibleBarrier(StructuredProduct):
 
     def get_legs(self):
         return [
-            (ZeroCouponBond(face_value=self.notional, maturity=self.ttm), +1.0),
+            (ZeroCouponBond(face_value=self.notional, pricing_date=self.pricing_date, maturity_date=self.maturity_date), +1.0),
             (Put(self.K, self.maturity_date), -1.0),
             (DownAndOutPut(self.K, self.maturity_date, barrier=self.barrier), +1.0)
         ]

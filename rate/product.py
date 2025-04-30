@@ -120,7 +120,7 @@ class FixedRateBond(Bond):
         # 3) montants et ZCB
         cashflows = []
         for i, pay_date in enumerate(dates):
-            amount = self.face_value * self.coupon_rate * accruals[i]
+            amount = float(self.face_value * self.coupon_rate * accruals[i])
             if pay_date == self.maturity_date:
                 amount += self.face_value
             cashflows.append(
@@ -160,7 +160,7 @@ class FloatingRateBond(Bond):
         for i, pay_date in enumerate(dates):
             idx_rate = min(i, len(self.forecasted_rates)-1)
             fwd = self.forecasted_rates[idx_rate]
-            amount = self.face_value * (self.multiplier * fwd + self.margin) * accruals[i]
+            amount = float(self.face_value * (self.multiplier * fwd + self.margin) * accruals[i])
             if pay_date == self.maturity_date:
                 amount += self.face_value
             cashflows.append(
@@ -352,65 +352,114 @@ class InterestRateSwap(ScheduleMixin):
 # Usage exemple
 
 if __name__ == "__main__":
-    from rate.curve_utils import make_zc_curve
-    # chargement de la courbe
-    # zc_curve: fonction t (années) → taux zc
-    zc_curve = make_zc_curve("interpolation", [1,2,3], [0.02,0.025,0.03])
 
-    pricing = datetime(2025,4,25)
-    maturity = datetime(2030,4,25)
+    from data.management.data_retriever import DataRetriever
+    from rate.zc_curve import ZCFactory
 
-    # Zero Coupon
-    zcb = ZeroCouponBond(1000, pricing, maturity, "Actual/365")
-    print("ZCB :", round(zcb.price(zc_curve),2))
+    # === Paramètres généraux ===
+    valuation_date = datetime(2023, 4, 25)
+    maturity = datetime(2028, 4, 25)
+    notional = 1_000_000
+    face_value = 1_000
+    freq = 2  # semestriel
 
-    # Fixed Rate Bond 6% annuel, semestriel
-    frb = FixedRateBond(1000, 0.06, pricing, maturity, "30/360", frequency=2)
-    print("Fixed :", round(frb.price(zc_curve),2))
+    DR = DataRetriever("LVMH")
 
-    # Floating Rate Bond
-    forecast = [0.02,0.021,0.022,0.023,0.024]
-    flo = FloatingRateBond(1000, 0.002, pricing, maturity,
-                           forecasted_rates=forecast,
-                           convention_days="Actual/365", frequency=2, multiplier=1.0)
-    print("Float:", round(flo.price(zc_curve),2))
+    rfc = DR.get_risk_free_curve(valuation_date)
+    fwc = DR.get_floating_curve(valuation_date)
 
-    # --- 6) Taux forward 1→2 ans ---
-    start = pricing + relativedelta(years=1)
-    end   = pricing + relativedelta(years=2)
+    # === 1) Calibrage de la courbe ZC (Svensson) ===
+    zcf = ZCFactory(rfc, fwc, dcc="Actual/365")
+    sv_guess = [0.02, -0.01, 0.01, 0.005, 1.5, 3.5]
+
+    df_curve = zcf.discount_curve(
+        method="svensson",
+        initial_guess=sv_guess
+    )
+
+    fwd_curve = zcf.forward_curve(
+        method="svensson",
+        initial_guess=sv_guess
+    )
+
+    # === 2) Zero Coupon Bond ===
+    zcb = ZeroCouponBond(
+        face_value=face_value,
+        pricing_date=valuation_date,
+        maturity_date=maturity,
+        convention_days="Actual/365"
+    )
+    print("ZCB price:", round(zcb.price(df_curve), 2))
+
+    # === 3) Fixed Rate Bond 6% semestriel ===
+    frb = FixedRateBond(
+        face_value=face_value,
+        coupon_rate=0.06,
+        pricing_date=valuation_date,
+        maturity_date=maturity,
+        convention_days="30/360",
+        frequency=freq
+    )
+    print("Fixed Rate Bond price:", round(frb.price(df_curve), 2))
+
+    # === 4) Floating Rate Bond ===
+    # Génération des taux forward pour chaque période de paiement
+    dates = frb.generate_schedule(valuation_date, maturity, freq)
+    dcc = DayCountConvention("Actual/365")
+    t_js = [dcc.year_fraction(valuation_date, d) for d in dates]
+    forwards = [
+        fwd_curve(t_js[i - 1] if i > 0 else 0.0, t_js[i])
+        for i in range(len(t_js))
+    ]
+
+    flo = FloatingRateBond(
+        face_value=face_value,
+        margin=0.002,
+        pricing_date=valuation_date,
+        maturity_date=maturity,
+        forecasted_rates=forwards,
+        convention_days="Actual/365",
+        frequency=freq,
+        multiplier=1.0
+    )
+    print("Floating Rate Bond price:", round(flo.price(df_curve), 2))
+
+    # === 5) Taux forward discret 1->2 ans ===
+    start = valuation_date + relativedelta(years=1)
+    end = valuation_date + relativedelta(years=2)
     fwd = ForwardRate(
-        pricing_date    = pricing,
-        start_date      = start,
-        end_date        = end,
-        convention_days = "Actual/365"
+        pricing_date=valuation_date,
+        start_date=start,
+        end_date=end,
+        convention_days="Actual/365"
     )
-    print(f"Taux forward {start.date()} → {end.date()} : {fwd.value(zc_curve)*100:.2f}%")
+    print(
+        f"Forward rate {start.date()} -> {end.date()}: {fwd.value(df_curve) * 100:.2f}%"
+    )
 
-    # --- 7) FRA 1→2 ans, notional 1 M, strike au forward implicite ---
-    strike = fwd.value(zc_curve)
+    # === 6) FRA 1->2 ans ===
+    strike = fwd.value(df_curve)
     fra = ForwardRateAgreement(
-        notional        = 1_000_000,
-        strike          = strike,
-        pricing_date    = pricing,
-        start_date      = start,
-        end_date        = end,
-        convention_days = "Actual/365"
+        notional=notional,
+        strike=strike,
+        pricing_date=valuation_date,
+        start_date=start,
+        end_date=end,
+        convention_days="Actual/365"
     )
-    print("MtM FRA payer fixe :", round(fra.mtm(zc_curve), 2), "€")
-    print(f"Taux forward {start.date()} → {end.date()} : {fra.fair_rate(zc_curve)*100:.2f}%")
+    print("FRA MtM (payer fixe):", round(fra.mtm(df_curve), 2), "€")
 
-    # --- 8) Swap payer fixe 5 ans semestriel, fixed_rate = 3.5% ---
-    # A ajuster notamment au niveau des forecasted rates et du type de swap (ois ou standard pour capitaliser quotidiennement les o/n quotidiens sur les legs variables)
+    # === 7) Swap payer fixe 5 ans semestriel ===
     swap = InterestRateSwap(
-        notional        = 1_000_000,
-        fixed_rate      = 0.035,  # 3.5%
-        pricing_date    = pricing,
-        maturity_date   = maturity,
-        convention_days = "30/360",
-        frequency       = 2,
-        #forecasted_rates= [0.025, 0.026, 0.027, 0.028, 0.029, 0.03],  # semestres
-        margin          = 0.0,
-        multiplier      = 1.0
+        notional=notional,
+        fixed_rate=0.035,
+        pricing_date=valuation_date,
+        maturity_date=maturity,
+        convention_days="30/360",
+        frequency=freq,
+        forecasted_rates=forwards,
+        multiplier=1.0,
+        margin=0.0
     )
-    print("MtM IRS payer fixe (5 ans) :", round(swap.mtm(zc_curve), 2), "€")
-    print(f"Taux de swap : {swap.swap_rate(zc_curve)*100:.2f}%")
+    print("Swap MtM (payer fixe):", round(swap.mtm(df_curve), 2), "€")
+    print(f"Swap par rate: {swap.swap_rate(df_curve) * 100:.2f}%")

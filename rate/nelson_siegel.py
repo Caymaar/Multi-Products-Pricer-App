@@ -1,4 +1,3 @@
-import pandas as pd
 import numpy as np
 from scipy.optimize import minimize
 import plotly.graph_objects as go
@@ -95,15 +94,15 @@ if __name__ == "__main__":
     from data.management.data_retriever import DataRetriever
     from rate.zc_curve import ZeroCouponCurveBuilder
     from datetime import datetime
-    from utils import tenor_to_years
+    from data.management.data_utils import tenor_to_years
 
     np.random.seed(272)
 
     DR = DataRetriever("LVMH")
 
     date = datetime(year=2023,month=10,day=1)
-    curve = DR.get_risk_free_curve(date) / 100
-    spot = DR.get_risk_free_index(date) / 100
+    curve = DR.get_risk_free_curve(date)
+    spot = DR.get_risk_free_index(date)
     maturity = np.array([tenor_to_years(tenor=t) for t in curve.index])
 
     zc = ZeroCouponCurveBuilder(maturity,curve.values)

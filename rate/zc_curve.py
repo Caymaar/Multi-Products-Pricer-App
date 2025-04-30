@@ -4,9 +4,8 @@ from rate.nelson_siegel import NelsonSiegelModel
 from rate.svensson import SvenssonModel
 import numpy as np
 from datetime import datetime
-from data.management.data_retriever import DataRetriever
-from utils import tenor_to_years
 import pandas as pd
+from data.management.data_utils import tenor_to_years
 
 class ZeroCouponCurveBuilder:
     def __init__(self, taus, swap_rates, freq=1):
@@ -68,7 +67,7 @@ class ZeroCouponCurveBuilder:
             n_steps = kwargs.get('n_steps')
             if dt is None or n_steps is None:
                 raise ValueError("dt et n_steps requis pour Vasicek")
-            model = VasicekModel.calibrate(self.zero_rates, self.dt, n_steps)
+            model = VasicekModel.calibrate(self.zero_rates, dt, n_steps)
             return model
 
         else:
@@ -95,7 +94,6 @@ class ZCFactory:
         """
         Construit une courbe ZC selon la méthode spécifiée.
 
-        :param date: date de valorisation
         :param method: 'interpolation', 'nelson-siegel', 'svensson', 'vasicek'
         :param curve_type: 'discount', 'forward'
         :param **kwargs : ->
@@ -113,12 +111,11 @@ class ZCFactory:
         """
         Renvoie une fonction DF(t) pour actualiser des flux, à partir de la courbe ZC calibrée.
 
-        :param date: date de valorisation
         :param method: méthode de calibration (interpolation, nelson-siegel, etc.)
         :param kwargs: paramètres du modèle
         :return: fonction DF(t) = exp(-r(t) * t)
         """
-        zc_curve = self.make_zc_curve(method=method,curve_type='discount', **kwargs)
+        zc_curve = self.make_zc_curve(method=method, curve_type='discount', **kwargs)
 
         def discount_factor(t: float) -> float:
             r = zc_curve.yield_value(t)
@@ -135,43 +132,27 @@ class ZCFactory:
         :param kwargs: paramètres du modèle
         :return: fonction f(t1, t2)
         """
-        zc_curve = self.make_zc_curve(method=method,curve_type='forward', **kwargs)
+        zc_curve = self.make_zc_curve(method=method, curve_type='forward', **kwargs)
 
         return zc_curve.forward_rate
 
-    def get_discound_and_forward_curves(self, method: str = "interpolation", **kwargs):
-        """
-        Renvoie une fonction DF(t) pour actualiser des flux et une fonction f(t1, t2) pour le taux forward.
-
-        :param method: méthode de calibration (interpolation, nelson-siegel, etc.)
-        :param kwargs: paramètres du modèle
-        :return: tuple (fonction DF(t), fonction f(t1, t2))
-        """
-        zc_curve = self.make_zc_curve(method=method,curve_type='discount', **kwargs)
-
-        def discount_factor(t: float) -> float:
-            r = zc_curve.yield_value(t)
-            return np.exp(-r * t)
-
-        fwd_curve = self.make_zc_curve(method=method,curve_type='forward', **kwargs)
-
-        return discount_factor, fwd_curve.forward_rate
-
 if __name__ == "__main__":
+
     import matplotlib.pyplot as plt
     from data.management.data_retriever import DataRetriever
-    from utils import tenor_to_years
+    from data.management.data_utils import tenor_to_years
 
     # === Paramètres généraux ===
     source = "LVMH"
     valuation_date = datetime(year=2023, month=10, day=1)
     dcc = "Actual/365"
 
-    zcf = ZCFactory(source=source, date=valuation_date, dcc=dcc)
     data = DataRetriever(source)
-    curve = data.get_risk_free_curve(valuation_date) / 100
-    tenors = np.array([tenor_to_years(tenor=t, dcc=dcc) for t in curve.index])
-    rates = curve.values
+    rf_curve = data.get_risk_free_curve(valuation_date)
+    fl_curve = data.get_floating_curve(valuation_date)
+    zcf = ZCFactory(risk_free_curve=rf_curve, floating_curve=fl_curve, dcc=dcc)
+    tenors = np.array([tenor_to_years(tenor=t, dcc=dcc) for t in rf_curve.index])
+
 
     # === Paramètres initiaux pour modèles ===
     ns_guess = [0.02, -0.01, 0.01, 1.5]
@@ -194,7 +175,7 @@ if __name__ == "__main__":
     for label, zc_model in methods.items():
         zc_yields = zc_model.yield_curve_array(T)
         plt.plot(T, zc_yields, label=label)
-    plt.scatter(tenors, rates, color="black", label="Taux observés", zorder=5)
+    plt.scatter(tenors, rf_curve, color="black", label="Taux observés", zorder=5)
     plt.title("Courbes Zéro-Coupon calibrées (Interpolation / NS / Svensson)")
     plt.xlabel("Maturité (années)")
     plt.ylabel("Taux Zéro-Coupon")

@@ -2,10 +2,10 @@ from typing import Union
 import numpy as np
 import copy
 from scipy.stats import norm
-from pricers.bs_pricer import BlackScholesPricer
+from pricers.bs_pricer import BlackScholesPricer, BSPortfolio
 from risk_metrics.greeks import GreeksCalculator
 from datetime import datetime, timedelta
-
+from option.option import Call
 
 class Backtest:
     def __init__(self, model, shift_date: datetime, p_type="MC"):
@@ -31,10 +31,9 @@ class Loss:
 
     def _retrieve_parameters(self, shift_date: datetime):
         self.S0 = self._original_model.market.S0
-        self.r = self._original_model.market.r
         self.sigma = self._original_model.market.sigma
         self.pricing_date = self._original_model.pricing_date
-        self.adj_T = self._original_model.market.DaysCountConvention.year_fraction(start_date=pricing_date, end_date=shift_date)
+        self.adj_T = self._original_model.market.dcc.year_fraction(start_date=self.pricing_date, end_date=shift_date)
         self.sigma_var = self.sigma * np.sqrt(self.adj_T)
 
     def _generate_St(self, alpha: float = 0.05, nb_simu: Union[None, int] = None) -> Union[float, np.ndarray]:
@@ -44,7 +43,7 @@ class Loss:
         else:
             multiplier = np.random.normal(0, 1, nb_simu)
         St = self.S0 * np.exp(
-            ((self.r - 0.5 * self.sigma ** 2) * self.adj_T + self.sigma * np.sqrt(self.adj_T) * multiplier))
+            ((self._original_model.market.zero_rate(self.adj_T) - 0.5 * self.sigma ** 2) * self.adj_T + self.sigma * np.sqrt(self.adj_T) * multiplier))
 
         return St
     
@@ -66,7 +65,7 @@ class Loss:
         value_t = np.atleast_1d(self._original_model.price(type=self.p_type))  # toujours array 1D
 
         # Actualise la valeur future
-        discount_factor = np.exp(-self.r * self.adj_T)
+        discount_factor = np.exp(-self._original_model.market.zero_rate(self.adj_T) * self.adj_T)
         value_dt = value_dt * discount_factor
 
         # Assure que value_dt est 2D (n_simu, n_options)
@@ -180,7 +179,7 @@ if __name__ == "__main__":
     maturity = pricing_date + timedelta(days=365)
     shift_date = pricing_date + timedelta(days=14) # VaR à 14 jours
 
-    market = Market(S0=S0, r=r, sigma=sigma)
+    market = Market(S0=S0, zero_rate_curve=r, sigma=sigma)
     call_option = Call(K=925, maturity=maturity)
     put_option = Put(K=925, maturity=maturity)
     opt_ptf = OptionPortfolio([call_option, put_option]) # Portefeuille quelconque
@@ -241,7 +240,7 @@ if __name__ == "__main__":
 
     # === Backtest Setup (Monte Carlo) ===
     print(f'\n --------  VaR via modèle Monte Carlo -------- ')
-    mce = MonteCarloEngine(market=market, option_ptf=opt_ptf, pricing_date=pricing_date, n_paths=1000, n_steps=300)
+    mce = MonteCarloEngine(market=market, option_ptf=opt_ptf, pricing_date=pricing_date, n_paths=10000, n_steps=300, seed=2)
     backtest = Backtest(model=mce, shift_date=shift_date)
 
     # === VaR Théorique ===

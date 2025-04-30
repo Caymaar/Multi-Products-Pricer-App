@@ -86,7 +86,7 @@ if __name__ == "__main__":
 
     from data.management.data_retriever import DataRetriever
     from zc_curve import ZeroCouponCurveBuilder
-    from utils import tenor_to_years
+    from data.management.data_utils import tenor_to_years
     from datetime import datetime
 
     DR = DataRetriever("AMAZON")

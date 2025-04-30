@@ -27,7 +27,7 @@ class TreePortfolio:
         option_groups = defaultdict(list)
 
         for option in self.options.assets:
-            T = self.market.DaysCountConvention.year_fraction(
+            T = self.market.dcc.year_fraction(
                 start_date=self.pricing_date, end_date=option.T
             )
             dt = T / self.n_steps
@@ -104,7 +104,7 @@ class TreeModel(Engine):
 
         # Ajustement pour un pricing d'un portefeuille d'option unique et non vectoriel par rapport à Monte Carlo
         self.dt = self.dt[-1]
-        self.df = self.df[-1]
+        self.df = self.market.discount_factor
         self.t_div = self.t_div[-1] if self.t_div is not None else None
 
         self.THRESHOLD = THRESHOLD
@@ -123,12 +123,12 @@ class TreeModel(Engine):
 
     def forward(self, parent, step):
         if self.is_div_date(step):
-            return parent.S * np.exp(self.market.r * self.dt) - self.market.dividend
-        return parent.S * np.exp(self.market.r * self.dt)
+            return parent.S * np.exp(self.market.zero_rate(self.dt) * self.dt) - self.market.dividend
+        return parent.S * np.exp(self.market.zero_rate(self.dt) * self.dt)
 
     def get_proba(self, div_node, step):
         average = self.forward(div_node, step)
-        var = div_node.S ** 2 * np.exp(2 * self.market.r * self.dt) * (np.exp(self.market.sigma ** 2 * self.dt) - 1)
+        var = div_node.S ** 2 * np.exp(2 * self.market.zero_rate(self.dt) * self.dt) * (np.exp(self.market.sigma ** 2 * self.dt) - 1)
 
         proba_down = (div_node.child_mid.S ** (-2) * (var + average ** 2) - 1 - (self.alpha + 1) *
                       (div_node.child_mid.S ** (-1) * average - 1)) / ((1 - self.alpha) * (self.alpha ** (-2) - 1))
@@ -357,22 +357,28 @@ class TreeModel(Engine):
                 down_node = down_node.bro_down
                 down_node.NFV = self.options.assets[-1].intrinsic_value(down_node.S)
 
-            step = self.n_steps
-            # Loop over parent Nodes
-            while trunc_node.parent is not None:
-                trunc_node = trunc_node.parent
-                trunc_node.NFV = self.df * self.average_child_value(trunc_node, step - 1)
+            for j in range(self.n_steps - 1, -1, -1):
+                t_j = j * self.dt
+                t_jp1 = (j + 1) * self.dt
+                # facteur d'actualisation entre t_{j+1} et t_j
+                df_step = self.df(t_jp1) / self.df(t_j)
 
-                # Loop over down Nodes
-                up_node, down_node = trunc_node, trunc_node
-                while up_node.bro_up is not None:
-                    up_node = up_node.bro_up
-                    up_node.NFV = self.df * self.average_child_value(up_node, step - 1)
-                while down_node.bro_down is not None:
-                    down_node = down_node.bro_down
-                    down_node.NFV = self.df * self.average_child_value(down_node, step - 1)
-
-                step -= 1
+                # on récupère la tranche de la colonne j
+                trunc_node = self.get_trunc_node(j)
+                # on parcourt tous les noeuds de cette colonne
+                # (en naviguant via bro_up / bro_down)
+                stack = [trunc_node]
+                while stack:
+                    nd = stack.pop()
+                    # calcule valeur moyenne de ses enfants
+                    val = self.average_child_value(nd, j)
+                    # actualise un pas
+                    nd.NFV = df_step * val
+                    # empile ses frères pour itération
+                    if nd.bro_up is not None:
+                        stack.append(nd.bro_up)
+                    if nd.bro_down is not None:
+                        stack.append(nd.bro_down)
 
         if kwargs.get("up"):
             return self.root.bro_up.NFV
@@ -384,7 +390,7 @@ class TreeModel(Engine):
 
     def gap(self):
         return (3 * self.market.S0 * (np.exp(self.market.sigma ** 2 * self.dt) - 1) * np.exp(
-            2 * self.market.r * self.dt)) \
+            2 * self.market.zero_rate(self.dt) * self.dt)) \
             / (8 * np.sqrt(2 * np.pi) * np.sqrt(np.exp(self.market.sigma ** 2 * self.T) - 1))
 
     def proba_check(self):

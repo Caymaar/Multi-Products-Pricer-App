@@ -16,7 +16,7 @@ class BSPortfolio:
         self.options = option_ptf
         self.pricing_date = pricing_date
         self.bse = {}  # Dictionnaire {(T, dt): TreeModel}
-        self.T = np.array([self.market.DaysCountConvention.year_fraction(start_date=pricing_date, end_date=option.T)
+        self.T = np.array([self.market.dcc.year_fraction(start_date=pricing_date, end_date=option.T)
                            for option in self.options.assets])
 
         self._build_bse()
@@ -107,14 +107,14 @@ class BlackScholesPricer:
         Méthode pour calculer les temps jusqu'à l'expiration des options (T).
         Retourne un array des durées en années entre la date de pricing et les dates de maturité.
         """
-        return self.market.DaysCountConvention.year_fraction(start_date=self.pricing_date, end_date=self.option.T)
+        return self.market.dcc.year_fraction(start_date=self.pricing_date, end_date=self.option.T)
 
     def _calculate_t_div(self):
         """
         Calcule l'indice temporel pour le dividende si le dividende est discret.
         """
         if self.market.div_type == "discrete" and self.market.div_date is not None:
-            return self.market.DaysCountConvention.year_fraction(start_date=self.pricing_date,end_date=self.market.div_date) # Conversion en année
+            return self.market.dcc.year_fraction(start_date=self.pricing_date,end_date=self.market.div_date) # Conversion en année
         else:
             return None
 
@@ -126,15 +126,15 @@ class BlackScholesPricer:
             return True
 
         # Vérifie les conditions d'équivalence pour un Call américain
-        if isinstance(self.option, Call) and (not self.market.dividend) and self.market.r > 0:
+        if isinstance(self.option, Call) and (not self.market.dividend) and self.market.zero_rate(self.T) > 0:
             return True
 
         # Vérifie les conditions d'équivalence pour un Call américain
-        if isinstance(self.option, Call) and (not self.market.dividend) and self.market.r > 0:
+        if isinstance(self.option, Call) and (not self.market.dividend) and self.market.zero_rate(self.T) > 0:
             return True
 
         # Vérifie les conditions d'équivalence pour un Put américain
-        if isinstance(self.option, Put) and (not self.market.dividend) and self.market.r < 0:
+        if isinstance(self.option, Put) and (not self.market.dividend) and self.market.zero_rate(self.T) < 0:
             return True
 
         # Sinon, ce n'est pas une option équivalente à une européenne
@@ -143,7 +143,7 @@ class BlackScholesPricer:
     def _adjust_initial_price(self):
         """ Ajuste le prix initial en fonction des dividendes. """
         if self.market.div_type == "discrete" and self.market.div_date is not None:
-            return self.market.S0 - self.market.dividend * np.exp(-self.market.r * self.t_div)
+            return self.market.S0 - self.market.dividend * np.exp(-self.market.zero_rate(self.t_div) * self.t_div)
         return self.market.S0
 
     def _compute_dividend_yield(self):
@@ -154,7 +154,7 @@ class BlackScholesPricer:
         """ Calcule d1 et d2 pour la formule de Black-Scholes. """
         sigma_sqrt_T = self.market.sigma * np.sqrt(self.T)
         self.d1 = (np.log(self.S0 / self.option.K) +
-                   (self.market.r - self.q + 0.5 * self.market.sigma ** 2) * self.T) / sigma_sqrt_T
+                   (self.market.zero_rate(self.T) - self.q + 0.5 * self.market.sigma ** 2) * self.T) / sigma_sqrt_T
         self.d2 = self.d1 - sigma_sqrt_T
 
     def price(self):
@@ -163,10 +163,10 @@ class BlackScholesPricer:
             self._compute_d1_d2()
             if isinstance(self.option, Call):
                 return self.S0 * np.exp(-self.q * self.T) * stats.norm.cdf(self.d1) - \
-                    self.option.K * np.exp(-self.market.r * self.T) * stats.norm.cdf(self.d2)
+                    self.option.K * np.exp(-self.market.zero_rate(self.T) * self.T) * stats.norm.cdf(self.d2)
 
             elif isinstance(self.option, Put):
-                return self.option.K * np.exp(-self.market.r * self.T) * stats.norm.cdf(-self.d2) - \
+                return self.option.K * np.exp(-self.market.zero_rate(self.T) * self.T) * stats.norm.cdf(-self.d2) - \
                     self.S0 * np.exp(-self.q * self.T) * stats.norm.cdf(-self.d1)
 
             else:
@@ -214,12 +214,12 @@ class BlackScholesPricer:
                     2 * np.sqrt(self.T))
         if isinstance(self.option, Call):
             second_term = self.q * self.S0 * np.exp(-self.q * self.T) * stats.norm.cdf(self.d1)
-            third_term = - self.market.r * self.option.K * np.exp(-self.market.r * self.T) * stats.norm.cdf(self.d2)
-            return (first_term + second_term + third_term)/self.market.DaysCountConvention.days_in_year
+            third_term = - self.market.zero_rate(self.T) * self.option.K * np.exp(-self.market.zero_rate(self.T) * self.T) * stats.norm.cdf(self.d2)
+            return (first_term + second_term + third_term)/self.market.dcc.days_in_year
         elif isinstance(self.option, Put):
             second_term = self.q * self.S0 * np.exp(-self.q * self.T) * stats.norm.cdf(-self.d1)
-            third_term = self.market.r * self.option.K * np.exp(-self.market.r * self.T) * stats.norm.cdf(-self.d2)
-            return (first_term - second_term + third_term)/self.market.DaysCountConvention.days_in_year
+            third_term = self.market.zero_rate(self.T) * self.option.K * np.exp(-self.market.zero_rate(self.T) * self.T) * stats.norm.cdf(-self.d2)
+            return (first_term - second_term + third_term)/self.market.dcc.days_in_year
 
     def rho(self):
         """ Calcul du Rho (sensibilité aux taux d'intérêt). """
@@ -228,9 +228,9 @@ class BlackScholesPricer:
         self._compute_d1_d2()
 
         if isinstance(self.option, Call):
-            return self.option.K * self.T * np.exp(-self.market.r * self.T) * stats.norm.cdf(self.d2) / 100
+            return self.option.K * self.T * np.exp(-self.market.zero_rate(self.T) * self.T) * stats.norm.cdf(self.d2) / 100
         elif isinstance(self.option, Put):
-            return -self.option.K * self.T * np.exp(-self.market.r * self.T) * stats.norm.cdf(-self.d2) / 100
+            return -self.option.K * self.T * np.exp(-self.market.zero_rate(self.T) * self.T) * stats.norm.cdf(-self.d2) / 100
 
     def speed(self):
         """ Calcul du Speed (dérivée seconde du prix de l'option par rapport au spot). """

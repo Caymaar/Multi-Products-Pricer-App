@@ -1,17 +1,17 @@
 import numpy as np
 from typing import Union
 from .abstract_stochastic import AbstractStochasticProcess
+from market.market import Market
 
 class GBMProcess(AbstractStochasticProcess):
     # ---------------- GBMProcess Class ----------------
-    def __init__(self, market, dt, n_paths, n_steps, t_div, rate_model=None, correlation_matrix=None, compute_antithetic=False, seed=None):
+    def __init__(self, market : Market, dt : float , n_paths : int, n_steps: int, t_div: float, rate_model=None, compute_antithetic=False, seed=None):
         super().__init__(n_paths, n_steps, dt, seed)
         self.market = market
         self.paths_scalar = None
         self.paths_vectorized = None
         self.t_div = t_div
         self.rate_model = rate_model
-        self.correlation_matrix = correlation_matrix
         self.compute_antithetic = compute_antithetic
 
     def _apply_dividends(self, paths: np.ndarray):
@@ -32,7 +32,12 @@ class GBMProcess(AbstractStochasticProcess):
         :return: Facteurs multiplicatifs cumulés (n_paths, n_steps)
         """
         if r is None:
-            r = self.market.r
+            # time grid t1, t2, …, t_n
+            times = np.arange(1, self.n_steps + 1) * self.dt  # shape (n_steps,)
+            # yield_value vectorisée sur le vecteur times → shape (n_steps,)
+            r_vals = np.vectorize(self.market.zero_rate)(times) #if callable(self.market.zero_rate) else self.market.zero_rate
+            # on broadcast pour obtenir (n_paths, n_steps)
+            r = np.broadcast_to(r_vals, dW.shape)
 
         # Dividend
         q = self.market.dividend if self.market.div_type == "continuous" else 0
@@ -71,10 +76,10 @@ class GBMProcess(AbstractStochasticProcess):
 
             else:
                 # Cas taux dynamique : on a besoin de browniens corrélés
-                if self.correlation_matrix is None:
+                if self.market.corr_matrix is None:
                     raise ValueError("Corrélation requise pour taux dynamique.")
 
-                dW_corr = self.brownian.vectorized_motion(self.n_paths, self.n_steps, self.correlation_matrix)
+                dW_corr = self.brownian.vectorized_motion(self.n_paths, self.n_steps, self.market.corr_matrix)
                 dW_S = dW_corr[:, :, 0]  # brownien pour sous-jacent
                 dW_r = dW_corr[:, :, 1]  # brownien pour taux
 
