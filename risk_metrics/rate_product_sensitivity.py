@@ -99,10 +99,10 @@ class InterestRateSwapSensitivity:
             margin           = swap.margin,
             pricing_date     = swap.pricing_date,
             maturity_date    = swap.maturity_date,
-            forecasted_rates = swap.forecasted_rates or [],
             convention_days  = swap.dcc.convention,
             frequency        = swap.frequency,
-            multiplier       = swap.multiplier
+            multiplier       = swap.multiplier,
+            forward_curve    = swap.forward_curve
         )
         self._sens_fixed = FixedRateBondSensitivity(fixed_bond, df_curve)
         self._sens_float = FloatingRateBondSensitivity(float_bond, df_curve)

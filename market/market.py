@@ -57,9 +57,9 @@ class Market:
                 d2 = self.discount(t2)
                 return (d1 / d2 - 1) / (t2 - t1)
 
-            self.forward_curve = _fwd
+            self.forward = _fwd
         else:
-            self.forward_curve = forward_curve
+            self.forward = forward_curve
 
     def discount_factor(self, t: float) -> float:
         return self.discount(t)
@@ -93,7 +93,7 @@ class Market:
             "div_date":         self.div_date,
             "day_count":        self.dcc.convention,     # récupère la convention initiale
             "discount_curve":   self.discount,
-            "forward_curve":    self.forward_curve,
+            "forward_curve":    self.forward,
             "zero_rate_curve":  self.zero_rate,
             "corr_matrix":      self.corr_matrix
         }

@@ -106,6 +106,7 @@ class TreeModel(Engine):
         self.dt = self.dt[-1]
         self.df = self.market.discount_factor
         self.t_div = self.t_div[-1] if self.t_div is not None else None
+        self.times = np.array([i * self.dt for i in range(self.n_steps + 1)])
 
         self.THRESHOLD = THRESHOLD
         self.alpha = np.exp(self.market.sigma * np.sqrt(3 * self.dt))
@@ -122,13 +123,23 @@ class TreeModel(Engine):
         return step < self.t_div <= (step + 1) if self.t_div is not None else False
 
     def forward(self, parent, step):
-        if self.is_div_date(step):
-            return parent.S * np.exp(self.market.zero_rate(self.dt) * self.dt) - self.market.dividend
-        return parent.S * np.exp(self.market.zero_rate(self.dt) * self.dt)
+        t_j = float(self.times[step])
+        t_jp1 = float(self.times[step + 1])
+        # Discount factor entre t_j et t_{j+1}
+        df_step = self.market.discount_factor(t_jp1) / self.market.discount_factor(t_j)
+        S_next = parent.S / df_step
+        if self.is_div_date(step) and self.market.div_type=="discrete":
+            return S_next - self.market.dividend
+        return S_next
 
     def get_proba(self, div_node, step):
+        t_j = float(self.times[step])
+        t_jp1 = float(self.times[step + 1])
+        # fact de croissance = 1/df_step
+        df_step = self.market.discount_factor(t_jp1) / self.market.discount_factor(t_j)
+
         average = self.forward(div_node, step)
-        var = div_node.S ** 2 * np.exp(2 * self.market.zero_rate(self.dt) * self.dt) * (np.exp(self.market.sigma ** 2 * self.dt) - 1)
+        var = div_node.S ** 2 * (np.exp(self.market.sigma ** 2 * self.dt) - 1) * (1/df_step**2)
 
         proba_down = (div_node.child_mid.S ** (-2) * (var + average ** 2) - 1 - (self.alpha + 1) *
                       (div_node.child_mid.S ** (-1) * average - 1)) / ((1 - self.alpha) * (self.alpha ** (-2) - 1))
@@ -357,28 +368,30 @@ class TreeModel(Engine):
                 down_node = down_node.bro_down
                 down_node.NFV = self.options.assets[-1].intrinsic_value(down_node.S)
 
-            for j in range(self.n_steps - 1, -1, -1):
+            step = self.n_steps
+            while step > 0:
+                j = step - 1
                 t_j = j * self.dt
-                t_jp1 = (j + 1) * self.dt
-                # facteur d'actualisation entre t_{j+1} et t_j
+                t_jp1 = step * self.dt
+                # discount factor entre t_{j+1} et t_j
                 df_step = self.df(t_jp1) / self.df(t_j)
 
-                # on récupère la tranche de la colonne j
-                trunc_node = self.get_trunc_node(j)
-                # on parcourt tous les noeuds de cette colonne
-                # (en naviguant via bro_up / bro_down)
-                stack = [trunc_node]
-                while stack:
-                    nd = stack.pop()
-                    # calcule valeur moyenne de ses enfants
-                    val = self.average_child_value(nd, j)
-                    # actualise un pas
-                    nd.NFV = df_step * val
-                    # empile ses frères pour itération
-                    if nd.bro_up is not None:
-                        stack.append(nd.bro_up)
-                    if nd.bro_down is not None:
-                        stack.append(nd.bro_down)
+                # remonter au noeud parent (noeud central de la colonne j)
+                trunc_node = trunc_node.parent
+                # actualisation de ce noeud
+                trunc_node.NFV = df_step * self.average_child_value(trunc_node, j)
+
+                # idem pour tous les frères up et down
+                up, down = trunc_node, trunc_node
+                while up.bro_up:
+                    up = up.bro_up
+                    up.NFV = df_step * self.average_child_value(up, j)
+                while down.bro_down:
+                    down = down.bro_down
+                    down.NFV = df_step * self.average_child_value(down, j)
+
+                # on passe au pas suivant
+                step = j
 
         if kwargs.get("up"):
             return self.root.bro_up.NFV

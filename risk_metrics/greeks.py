@@ -109,16 +109,32 @@ class GreeksCalculator:
         return price_new - price_old
 
     def rho(self):
-        """Calcul du Rho : dPrix/dr"""
-        r = self._original_model.market.r
+        """
+        Calcul du Rho : dPrix/dr
+        """
+        h    = self.epsilon
+        base = self._original_model.market
+        df0  = base.discount
+        zr0 = base.zero_rate
 
-        model_up = self._recreate_model(market=self._original_model.market.copy(r=r + self.epsilon))
-        model_down = self._recreate_model(market=self._original_model.market.copy(r=r - self.epsilon))
+        # on crée deux courbes remontées/baissées
+        def df_up(t):   return df0(t) * np.exp(-h * t)
+        def df_down(t): return df0(t) * np.exp( h * t)
 
-        price_up = self._get_price(model_up, "r_up")
-        price_down = self._get_price(model_down, "r_down")
+        def zr_up(t: float) -> float:
+            return zr0(t) + h
 
-        return (price_up - price_down) / (2 * self.epsilon) / 100
+        def zr_down(t: float) -> float:
+            return zr0(t) - h
+
+        mu = base.copy(discount_curve=df_up, zero_rate_curve=zr_up)
+        md = base.copy(discount_curve=df_down, zero_rate_curve=zr_down)
+
+        pu = self._get_price(self._recreate_model(market=mu), "rho_up")
+        pd = self._get_price(self._recreate_model(market=md), "rho_down")
+
+        return (pu - pd) / (2 * h) / 100
+
 
     def speed(self):
         """

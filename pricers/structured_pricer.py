@@ -1,6 +1,8 @@
 import numpy as np
 from typing import Tuple, List
 from datetime import datetime
+
+from market.day_count_convention import DayCountConvention
 from rate.product import ZeroCouponBond
 from option.option import Option, OptionPortfolio
 from market.market import Market
@@ -13,6 +15,7 @@ class StructuredPricer:
                  market: Market,
                  pricing_date: datetime,
                  df_curve,
+                 maturity_date: datetime,
                  n_paths: int = 100_000,
                  n_steps: int = 300,
                  seed: int = None,
@@ -20,6 +23,7 @@ class StructuredPricer:
         self.market = market
         self.pricing_date = pricing_date
         self.df_curve = df_curve
+        self.maturity_date = maturity_date
         self.dcc = market.dcc
         # paramètres pour simuler le sous-jacent
         self.n_paths = n_paths
@@ -46,18 +50,19 @@ class StructuredPricer:
 
     def simulate_underlying(self,
                             maturity_date: datetime,
-                            obs_dates: List[datetime]
+                            obs_dates: List[datetime],
+                            dcc: DayCountConvention
                            ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Simule un GBM du sous-jacent :
          - S     : array (n_paths, n_steps+1)
          - times : array des year-fractions pour chaque obs_date
         """
-        T = self.dcc.year_fraction(self.pricing_date, maturity_date)
+        T = dcc.year_fraction(self.pricing_date, maturity_date)
         dt = T / self.n_steps
         t_div = None
         if self.market.div_date is not None:
-            T_div = self.dcc.year_fraction(self.pricing_date, self.market.div_date)
+            T_div = dcc.year_fraction(self.pricing_date, self.market.div_date)
             t_div = int(T_div / dt)
         gbm = GBMProcess(
             market=self.market,
@@ -70,7 +75,7 @@ class StructuredPricer:
         )
         S = gbm.simulate()
         times = np.array([
-            self.dcc.year_fraction(self.pricing_date, d)
+            dcc.year_fraction(self.pricing_date, d)
             for d in obs_dates
         ])
         return S, times

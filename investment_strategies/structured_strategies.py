@@ -25,6 +25,7 @@ class StructuredProduct(Strategy):
         raise NotImplementedError
 
     def price(self, pricer: StructuredPricer) -> float:
+        pricer.dcc = self.dcc # override du dcc pour inclure celui du produit
         total = 0.0
         # ZCBs
         invested = self.notional
@@ -36,13 +37,22 @@ class StructuredProduct(Strategy):
         # Options vanilles
         opt_legs = [(leg, sign) for leg, sign in self.get_legs()
                     if isinstance(leg, Option)]
-        m = len(opt_legs)
-        if m > 0 and invested > 0:
-            for opt, sign in opt_legs:
-                engine = pricer.get_mc_engine(opt)
-                p = engine.price(type="MC")
-                #qty = (invested/m)/p if p > 0 else 0.0
-                total += sign * p # * qty * p
+        leg_prices = []
+        for leg, sign in opt_legs:
+            engine = pricer.get_mc_engine(leg)
+            p = engine.price(type="MC")
+            leg_prices.append((leg, sign, p))
+
+        # 2) Sommez uniquement les achats (sign > 0)
+        total_buy = sum(p for _, sign, p in leg_prices if sign > 0)
+
+        # 3) Répartissez l’invested proportionnellement
+        for leg, sign, p in leg_prices:
+            if sign > 0:
+                qty = invested / total_buy
+            else:
+                qty = 1.0
+            total += sign * qty * p
         return total
 
 
@@ -74,7 +84,12 @@ class Autocallable(StructuredProduct):
 
     def price(self, pricer: StructuredPricer) -> float:
         pricer.dcc = self.dcc
-        S, _ = pricer.simulate_underlying(self.maturity_date, self.obs_dates)
+        #S, _ = pricer.simulate_underlying(self.maturity_date, self.obs_dates)
+        S, times = pricer.simulate_underlying(
+                   maturity_date = pricer.maturity_date,
+                   obs_dates = self.obs_dates,
+                   dcc = self.dcc
+        )
         cashflows, times = pricer.compute_autocall_cashflows(
             S,
             self.coupon_barrier,

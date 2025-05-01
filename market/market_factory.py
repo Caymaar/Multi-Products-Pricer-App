@@ -56,11 +56,11 @@ def get_discount_forward_and_zero_curves(
         )
 
     # 1) zero‐rate continu
-    zero_rate = zcf.make_zc_curve(method=method, **curve_kwargs).yield_value
+    zero_rate = zcf.make_zc_curve(method=method, **curve_kwargs, dcc=dcc).yield_value
     # 2) discount factor continu
-    discount = zcf.discount_curve(method=method, **curve_kwargs)
+    discount = zcf.discount_curve(method=method, **curve_kwargs, dcc=dcc)
     # 3) forward discret implicite
-    forward = zcf.forward_curve(method=method, **curve_kwargs)
+    forward = zcf.forward_curve(method=method, **curve_kwargs, dcc=dcc)
 
     return discount, forward, zero_rate
 
@@ -71,7 +71,8 @@ def create_market(
     hist_window: int = 252,
     curve_method: Literal["interpolation","nelson-siegel","svensson","vasicek"] = "interpolation",
     curve_kwargs: Dict[str, Any] | None = None,
-    dcc: str = "Actual/365"
+    dcc: str = "Actual/365",
+    flat_rate: float | None = None
 ) -> Market:
     """
     Crée un Market en 4 étapes :
@@ -90,13 +91,20 @@ def create_market(
     div, div_type, div_date = get_dividend_info(stock)
 
     # 3) préparer les 3 courbes
-    df_curve, fwd_curve, zr_curve = get_discount_forward_and_zero_curves(
-        dr           = dr,
-        date         = pricing_date,
-        method       = curve_method,
-        curve_kwargs = curve_kwargs,
-        dcc          = dcc
-    )
+    if flat_rate is not None:
+        # on wrappe le taux constant en trois callables
+        zr_curve    = lambda t: flat_rate
+        discount    = lambda t: np.exp(-flat_rate * t)
+        forward     = lambda t1, t2: flat_rate
+    else:
+        # on bootstrappe normalement
+        discount, forward, zr_curve = get_discount_forward_and_zero_curves(
+            dr            = dr,
+            date          = pricing_date,
+            method        = curve_method,
+            curve_kwargs  = curve_kwargs,
+            dcc           = dcc
+        )
 
     #4 obtenir la matrice de corrélation spot/taux
     corr_matrix = dr.get_correlation
@@ -109,8 +117,8 @@ def create_market(
         div_type         = div_type,
         div_date         = div_date,
         day_count        = dcc,
-        discount_curve   = df_curve,
-        forward_curve    = fwd_curve,
+        discount_curve   = discount,
+        forward_curve    = forward,
         zero_rate_curve  = zr_curve,
         corr_matrix      = corr_matrix
     )

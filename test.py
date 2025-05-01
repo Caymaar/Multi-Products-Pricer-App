@@ -67,6 +67,50 @@ market_lvmh = create_market(
 
 market_lvmh.S0 = 100
 
+# === 1) Définir la date de pricing et la maturité (3 ans) ===
+pricing_date  = datetime(2025, 4, 25)
+maturity_date = pricing_date + timedelta(days=365 * 3)
+
+# === 2) Paramètres pour Svensson ===
+sv_guess = [0.02, -0.01, 0.01, 0.005, 1.5, 3.5]
+
+# === 3) Instanciation « tout‐en‐un » du Market LVMH ===
+market_lvmh = create_market(
+    stock         = "LVMH",
+    pricing_date  = pricing_date,
+    vol_source    = "implied",         # ou "historical"
+    hist_window   = 252,
+    curve_method  = "svensson",        # méthode de calibration
+    curve_kwargs  = {"initial_guess": sv_guess},
+    dcc           = "Actual/365",
+    flat_rate     = 0.05
+)
+
+K = market_lvmh.S0*(0.9)
+
+options = OptionPortfolio([
+    Call(K, maturity_date, exercise="european"),
+    Put(K, maturity_date, exercise="european"),
+    ]
+)
+
+# --- Paramètres ---
+n_paths = 10000
+n_steps = 300
+seed = 2
+
+print("\n====== TRINOMIAL TREE PRICING ======")
+
+engine = TreePortfolio(
+    market=market_lvmh,
+    option_ptf=options,
+    pricing_date=pricing_date,
+    n_steps=n_steps
+)
+
+price = engine.price()
+print(f"Prix estimé (Trinomial Tree) : {np.round(price,4)}")
+
 # === 4) Initialisation du StructuredPricer ===
 pricer = StructuredPricer(
     market=market_lvmh,
@@ -242,36 +286,6 @@ strategies = [
 
 print("\n====== EUROPEAN VANILLA STRATEGIES PRICING ======")
 
-# --- Pricing des stratégies à caractère européen ---
-for strat in strategies:
-    print(f"\n=== {strat.name} ===")
-
-    price = 0
-    prices = []
-
-    for leg, quantity in strat.get_legs():
-        engine = MonteCarloEngine(
-            market=market_lvmh,
-            option_ptf=OptionPortfolio([leg]),
-            pricing_date=pricing_date,
-            n_paths=n_paths,
-            n_steps=n_steps,
-            seed=seed
-        )
-
-        p = engine.price(type="MC")
-        ci_low, ci_up = engine.price_confidence_interval(type="MC")
-
-        prices.append((leg.__class__.__name__, p, ci_low, ci_up, quantity))
-        price += quantity * p
-
-    for leg_name, p, low, high, q in prices:
-        print(f"{leg_name:>15} | Quantité: {q:+} | Prix: {p:.4f} | CI95%: [{low:.4f}, {high:.4f}]")
-
-    print(f"→ Prix total stratégie : {price:.4f}")
-
-    # Ajout du plot du payoff
-    plot_strategy_payoff(strat)
 
 # Options testables avec l'arbre trinomial (pas de barrières ici)
 options_tree = OptionPortfolio([
@@ -334,7 +348,7 @@ dates = frb.generate_schedule(valuation_date, maturity, freq)
 dcc = DayCountConvention("Actual/365")
 t_js = [dcc.year_fraction(valuation_date, d) for d in dates]
 forwards = [
-    market_lvmh.forward_rate(t_js[i - 1] if i > 0 else 0.0, t_js[i])
+    market_lvmh.forward(t_js[i - 1] if i > 0 else 0.0, t_js[i])
     for i in range(len(t_js))
 ]
 

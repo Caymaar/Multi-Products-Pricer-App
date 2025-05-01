@@ -89,7 +89,7 @@ class ZCFactory:
     def make_zc_curve(self,
              method: str = "interpolation",
              curve_type: str = "discount",
-             dcc:str = "Actual/360",
+             dcc:str = "Actual/365",
              **kwargs):
         """
         Construit une courbe ZC selon la méthode spécifiée.

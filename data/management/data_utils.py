@@ -77,7 +77,7 @@ def get_implied_vol(stock_name: str) -> pd.DataFrame:
         raise FileNotFoundError(f"Fichier d’implied vol introuvable : {file_path}")
     return pd.read_csv(file_path, sep=';')
 
-def tenor_to_years(tenor: str, start_date: datetime.date = None, dcc: str = "Actual/360") -> float:
+def tenor_to_years(tenor: str, start_date: datetime.date = None, dcc: str = "Actual/365") -> float:
     from dateutil.relativedelta import relativedelta
 
     unit = tenor[-1].upper()

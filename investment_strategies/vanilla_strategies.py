@@ -19,6 +19,8 @@ class BearCallSpread(Strategy):
         :param pricing_date: Date de pricing
         :param exercise: Type d'exercice ("european" par défaut)
         """
+        assert strike_sell < strike_buy, \
+            "Pour un Bear Call Spread, strike_sell < strike_buy"
         super().__init__("Bear Call Spread", pricing_date, maturity_date, convention_days)
         self.call_sell = Call(strike_sell, maturity_date, exercise)
         self.call_buy = Call(strike_buy, maturity_date, exercise)
@@ -39,6 +41,8 @@ class PutCallSpread(Strategy):
         :param pricing_date: Date de pricing
         :param exercise: Type d'exercice ("european" par défaut)
         """
+        # seuls call et put au même strike
+        assert isinstance(strike, (int, float)), "Strike doit être numérique"
         super().__init__("Put-Call Spread", pricing_date, maturity_date, convention_days)
         self.put = Put(strike, maturity_date, exercise)
         self.call = Call(strike, maturity_date, exercise)
@@ -60,6 +64,8 @@ class BullCallSpread(Strategy):
         :param pricing_date: Date de pricing
         :param exercise: Type d'exercice ("european" par défaut)
         """
+        assert strike_buy < strike_sell, \
+            "Pour un Bull Call Spread, strike_buy < strike_sell"
         super().__init__("Bull Call Spread", pricing_date, maturity_date, convention_days)
         self.call_buy = Call(strike_buy, maturity_date, exercise)
         self.call_sell = Call(strike_sell, maturity_date, exercise)
@@ -83,6 +89,8 @@ class ButterflySpread(Strategy):
         :param pricing_date: Date de pricing
         :param exercise: Type d'exercice ("european" par défaut)
         """
+        assert strike_mid - strike_low == strike_high - strike_mid, \
+            "Pour un butterfly symétrique, K_mid - K_low doit = K_high - K_mid"
         super().__init__("Butterfly Spread", pricing_date, maturity_date, convention_days)
         self.call_low = Call(strike_low, maturity_date, exercise)
         self.call_mid = Call(strike_mid, maturity_date, exercise)
@@ -124,13 +132,12 @@ class Strap(Strategy):
         :param exercise: Type d'exercice ("european" par défaut)
         """
         super().__init__("Strap", pricing_date, maturity_date, convention_days)
-        self.call1 = Call(strike, maturity_date, exercise)
-        self.call2 = Call(strike, maturity_date, exercise)
+        self.call = Call(strike, maturity_date, exercise)
         self.put = Put(strike, maturity_date, exercise)
         self._populate_legs()
 
     def get_legs(self):
-        return [(self.call1, 1), (self.call2, 1), (self.put, 1)]
+        return [(self.call, 2), (self.put, 1)]
 
 
 class Strip(Strategy):
@@ -146,12 +153,11 @@ class Strip(Strategy):
         """
         super().__init__("Strip", pricing_date, maturity_date, convention_days)
         self.call = Call(strike, maturity_date, exercise)
-        self.put1 = Put(strike, maturity_date, exercise)
-        self.put2 = Put(strike, maturity_date, exercise)
+        self.put = Put(strike, maturity_date, exercise)
         self._populate_legs()
 
     def get_legs(self):
-        return [(self.call, 1), (self.put1, 1), (self.put2, 1)]
+        return [(self.call, 1), (self.put, 2)]
 
 
 class Strangle(Strategy):
@@ -192,6 +198,8 @@ class Condor(Strategy):
         :param pricing_date: Date de pricing
         :param exercise: Type d'exercice ("european" par défaut)
         """
+        assert strike2 - strike1 == strike4 - strike3, \
+            "Pour un condor symétrique, K2 - K1 doit = K4 - K3"
         super().__init__("Condor", pricing_date, maturity_date, convention_days)
         self.call1 = Call(strike1, maturity_date, exercise)
         self.call2 = Call(strike2, maturity_date, exercise)
@@ -203,43 +211,58 @@ class Condor(Strategy):
         return [(self.call1, 1), (self.call2, -1), (self.call3, -1), (self.call4, 1)]
 
 
+def plot_strategy_payoff(strategy, S_range=None, buffer: float = 0.5):
+    """
+    Trace le profil de payoff à maturité pour une stratégie.
+    Si S_range n'est pas fourni, on le déduit des strikes :
+      - on récupère tous les strikes des options de la stratégie,
+      - on prend [min_strike*(1-buffer) , max_strike*(1+buffer)].
+    :param strategy: instance de Strategy (avec get_legs())
+    :param S_range: tableau de prix sous-jacent à maturité à tester
+    :param buffer: proportion autour des strikes pour étendre la grille
+    """
 
-def plot_strategy_payoff(strategy, S_range=None):
-    """
-    Trace un joli profil de payoff à maturité pour une stratégie.
-    """
+    global strikes
+
+    # 1) Détermination de la plage de S si non fournie
     if S_range is None:
-        S_range = np.linspace(50, 150, 500)
+        strikes = []
+        for opt, _ in strategy.get_legs():
+            if hasattr(opt, "K"):
+                strikes.append(opt.K)
+        if strikes:
+            k_min = min(strikes)
+            k_max = max(strikes)
+            low  = max(0.0, k_min * (1 - buffer))
+            high = k_max * (1 + buffer)
+        else:
+            # fallback si pas d'attribut K (produits non-standard)
+            low, high = 0.0, strategy.notional * (1 + buffer)
+        S_range = np.linspace(low, high, 500)
 
+    # 2) Calcul du payoff net
     payoffs = np.zeros_like(S_range)
-
     for option, qty in strategy.get_legs():
-        intrinsic_values = np.array([
-            option.intrinsic_value(ST) for ST in S_range
-        ])
-        payoffs += qty * intrinsic_values
+        intrinsic = np.array([option.intrinsic_value(ST) for ST in S_range])
+        payoffs += qty * intrinsic
 
-    # --- Plotting stylé ---
+    # 3) Tracé
     fig, ax = plt.subplots(figsize=(10, 5))
-    ax.plot(S_range, payoffs, label=strategy.name, color="#2a9d8f", lw=2)
+    ax.plot(S_range, payoffs, lw=2, label=strategy.name)
+    ax.fill_between(S_range, payoffs, 0, where=(payoffs >= 0),
+                    alpha=0.5, label="Gain")
+    ax.fill_between(S_range, payoffs, 0, where=(payoffs <  0),
+                    alpha=0.4, label="Perte")
 
-    # --- Zone de gain et perte ---
-    ax.fill_between(S_range, payoffs, 0, where=(payoffs >= 0), interpolate=True, color="#a8dadc", alpha=0.5, label='Gain')
-    ax.fill_between(S_range, payoffs, 0, where=(payoffs < 0), interpolate=True, color="#e76f51", alpha=0.4, label='Perte')
+    # Repère au niveau du ou des strikes
+    for K in set(strikes):
+        ax.axvline(K, color="gray", linestyle="--", lw=1, alpha=0.7)
 
-    # --- Lignes et axes ---
     ax.axhline(0, color="black", lw=1)
-    ax.axvline(100, color="gray", ls="--", lw=1, alpha=0.5)  # prix spot de base
-
-    # --- Titres et style ---
     ax.set_title(f"Payoff à maturité – {strategy.name}", fontsize=14, weight="bold")
-    ax.set_xlabel("Prix du sous-jacent à maturité (S_T)", fontsize=12)
+    ax.set_xlabel("Prix du sous-jacent à maturité", fontsize=12)
     ax.set_ylabel("Payoff net", fontsize=12)
     ax.grid(True, linestyle=":", alpha=0.7)
-
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-
     ax.legend(loc="best", frameon=False)
     plt.tight_layout()
     plt.show()

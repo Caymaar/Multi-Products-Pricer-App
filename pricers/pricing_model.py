@@ -32,7 +32,7 @@ class Engine(ABC):
         """
         if self.market.div_type == "discrete" and self.market.div_date is not None:
             T_div = self.market.dcc.year_fraction(start_date=self.pricing_date,end_date=self.market.div_date) # Conversion en année
-            return int(T_div/self.dt)  # Conversion en indice de pas de temps
+            return np.floor(T_div / self.dt).astype(int) # Conversion en indice de pas de temps
         else:
             return None
 

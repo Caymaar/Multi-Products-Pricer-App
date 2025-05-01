@@ -7,6 +7,7 @@ from pricers.regression import Regression
 from stochastic_process.gbm_process import GBMProcess
 from market.market import Market
 from typing import List, Tuple, Dict
+from collections import defaultdict
 
 
 # ---------------- Classe MCModel ----------------
@@ -21,9 +22,19 @@ class MonteCarloEngine(Engine):
         self.american_price_by_time = None
 
         self.diffusions = {}  # Stocke les processus de diffusion pour chaque option
-        for option, dt in zip(self.options.assets, self.dt):
-            self.diffusions[option.name] = GBMProcess(market=self.market, dt=dt, n_paths=self.n_paths, n_steps=self.n_steps,
-                                                     t_div=self.t_div, compute_antithetic=compute_antithetic, seed=seed)
+        for idx, (option, dt) in enumerate(zip(self.options.assets, self.dt)):
+            # on récupère l’indice pour ce dt_i, ou None
+            t_div_i = None
+            if self.t_div is not None:
+                t_div_i = int(self.t_div[idx])
+            self.diffusions[option.name] = GBMProcess(
+                market             = self.market,
+                dt                 = dt,
+                n_paths            = self.n_paths,
+                n_steps            = self.n_steps,
+                t_div              = t_div_i,
+                compute_antithetic = compute_antithetic,
+                seed               = seed)
 
     def _price_american_lsm(self, paths, option, idx: int, analysis=False) -> Tuple[np.ndarray, List[float]]:
         """
@@ -90,13 +101,13 @@ class MonteCarloEngine(Engine):
         """
         # 1) Simulations pour tout le portefeuille, une seule fois
         paths_dict = self.gbm_ptf_simulations()
-        #    -> { option.name : array (n_paths, n_steps+1) }
+        #    -> { idx : array (n_paths, n_steps+1) }
         self.am_payoffs = {}
 
         prices = np.zeros(len(self.options.assets))
         # 2) Backward LSM option par option
         for idx, option in enumerate(self.options.assets):
-            paths = paths_dict[option.name]
+            paths = paths_dict[idx]
             cf,_ = self._price_american_lsm(paths, option, idx)  # vecteur (n_paths,)
             self.am_payoffs[option.name] = cf.copy()  # on stocke pour usage ultérieur
             prices[idx] = cf.mean()
@@ -118,9 +129,10 @@ class MonteCarloEngine(Engine):
         """Calcule les payoffs actualisés pour un pricing européen."""
         payoffs = {}
 
-        for id, option in enumerate(self.options.assets):
-            payoffs[option.name] = option.intrinsic_value(paths[option.name]).astype(float) # Payoff à maturité
-            payoffs[option.name] *= np.exp(-self.market.zero_rate(self.T[id]) * self.T[id]) # Actualisation
+        for idx, option in enumerate(self.options.assets):
+            path = paths[idx]
+            cf = option.intrinsic_value(path).astype(float)
+            payoffs[option.name] = cf * self.market.discount_factor(self.T[idx])
 
         return payoffs
 
@@ -138,13 +150,13 @@ class MonteCarloEngine(Engine):
     def get_american_price_path(self) -> Dict[str, List[float]]:
         """
         Retourne, pour chaque option du portefeuille, la trajectoire des prix moyens
-        { option.name : [P(T), P(t_{n-1}), …, P(dt)] }.
+        { idx : [P(T), P(t_{n-1}), …, P(dt)] }.
         """
         paths_dict = self.gbm_ptf_simulations()
         price_paths: Dict[str, List[float]] = {}
 
         for idx, option in enumerate(self.options.assets):
-            paths = paths_dict[option.name]
+            paths = paths_dict[idx]
             _, pbyt = self._price_american_lsm(paths, option, idx, analysis=True)
             price_paths[option.name] = pbyt
 
@@ -181,22 +193,32 @@ class MonteCarloEngine(Engine):
             return self.european_price()
 
     def european_price(self) -> np.ndarray:
-        paths = self.gbm_ptf_simulations()
-        payoffs = self._discounted_eu_payoffs(paths)
-        prices = np.array([np.mean(payoffs[ind_payoff]) for ind_payoff in payoffs])
+        paths_dict = self.gbm_ptf_simulations()
+        payoffs = self._discounted_eu_payoffs(paths_dict)
+        prices = np.array([np.mean(payoffs[name]) for name in payoffs])
 
         return prices[-1] if len(prices)==1 else prices
 
 
     def gbm_ptf_simulations(self) -> dict:
         """
-        Simule les trajectoires de l'ensemble du portefeuille d'options.
-        :return: Un dictionnaire contenant les trajectoires simulées pour chaque option.
+        Simule une fois par groupe d'options identiques, puis redistribue.
         """
-        # Simule les trajectoires pour chaque option
+        # 1) regrouper les indices par "signature"
+        groups = defaultdict(list)
+        for idx, opt in enumerate(self.options.assets):
+            sig = (opt.__class__, opt.K, opt.T, getattr(opt, "exercise", None))
+            groups[sig].append(idx)
+
         simulations = {}
-        for option in self.options.assets:
-            simulations[option.name] = self.diffusions[option.name].simulate()
+        # 2) pour chaque groupe, on simule une fois
+        for sig, indices in groups.items():
+            idx0 = indices[0]
+            name0 = self.options.assets[idx0].name
+            paths = self.diffusions[name0].simulate()
+            # 3) on attribue la même trajectoire à tous les indices du groupe
+            for idx in indices:
+                simulations[idx] = paths
 
         return simulations
 

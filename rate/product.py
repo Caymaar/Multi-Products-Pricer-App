@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from market.day_count_convention import DayCountConvention
+from typing import Callable
 
 
 # --- Mixin pour le planning et les accruals ---
@@ -139,37 +140,76 @@ class FloatingRateBond(Bond):
                  margin: float,
                  pricing_date: datetime,
                  maturity_date: datetime,
-                 forecasted_rates: list[float],
                  convention_days: str = "Actual/365",
                  frequency: int = 1,
-                 multiplier: float = 1.0):
+                 multiplier: float = 1.0,
+                 forward_curve:  Callable[[float, float], float] | None = None,
+                 discount_curve: Callable[[float], float]       | None = None
+                ):
+        """
+        :param forward_curve: fonction f(t1,t2) si vous l’avez déjà ;
+                              sinon on le bootstrappe via discount_curve.
+        :param discount_curve: fonction DF(t). Obligatoire si forward_curve=None.
+        """
         super().__init__(face_value, pricing_date, maturity_date, convention_days)
-        self.margin = margin
-        self.forecasted_rates = forecasted_rates or []
-        self.frequency = frequency
-        self.multiplier = multiplier
+        self.margin         = margin
+        self.frequency      = frequency
+        self.multiplier     = multiplier
+        self.forward_curve  = forward_curve
+        self.discount_curve = discount_curve
+
+        if self.forward_curve is None and self.discount_curve is None:
+            raise ValueError("Il faut au moins fournir discount_curve si pas de forward_curve.")
 
     def build_cashflows_as_zc(self) -> list[ZeroCouponBond]:
+        # 1) calendrier
         dates    = self.generate_schedule(self.pricing_date,
                                           self.maturity_date,
                                           self.frequency)
+        # 2) accruals
         accruals = self.compute_accruals(dates,
                                          self.pricing_date,
                                          self.convention_days)
+
         cashflows = []
+        prev_t = 0.0
+        dcc    = DayCountConvention(self.convention_days)
+
         for i, pay_date in enumerate(dates):
-            idx_rate = min(i, len(self.forecasted_rates)-1)
-            fwd = self.forecasted_rates[idx_rate]
-            amount = float(self.face_value * (self.multiplier * fwd + self.margin) * accruals[i])
+            # maturité en années
+            t_i = dcc.year_fraction(self.pricing_date, pay_date)
+
+            # 3) on choisit la source du forward
+            if self.forward_curve is not None:
+                fwd = self.forward_curve(prev_t, t_i)
+            elif self.discount_curve is not None:
+                # bootstrapping discret implicite :
+                df_prev = self.discount_curve(prev_t)
+                df_i    = self.discount_curve(t_i)
+                delta   = accruals[i]
+                fwd     = (df_prev / df_i - 1) / delta
+            else:
+                raise ValueError("La recherche des forwards a échoué, aucune courbe n'a été instanciée")
+
+            # 4) montant du coupon
+            amount = float((self.multiplier * fwd + self.margin) \
+                     * self.face_value * accruals[i])
+
+            # à l’échéance on rembourse le nominal
             if pay_date == self.maturity_date:
                 amount += self.face_value
+
             cashflows.append(
                 ZeroCouponBond(amount,
                                self.pricing_date,
                                pay_date,
                                convention_days=self.convention_days)
             )
+            prev_t = t_i
+
         return cashflows
+
+
 
 class ForwardRate:
     """
@@ -258,96 +298,114 @@ class ForwardRateAgreement:
 # --- Interest Rate Swap ---
 class InterestRateSwap(ScheduleMixin):
     """
-    Swap payer-fixed vs receive-float:
-     • swap_rate(df_curve) → par rate
-     • mtm(df_curve)       → MtM aujourd’hui au fixed_rate choisi
+    Swap payer‐fixed vs receive‐float.
+      • swap_rate(df_curve=None) → par rate
+      • mtm(df_curve=None, fwd_curve=None) → MtM aujourd’hui
     """
+
     def __init__(self,
-                 notional:       float,
-                 fixed_rate:     float | None,
-                 pricing_date:   datetime,
-                 maturity_date:  datetime,
+                 notional: float,
+                 fixed_rate: float | None,
+                 pricing_date: datetime,
+                 maturity_date: datetime,
                  convention_days: str,
-                 frequency:      int = 1,
-                 multiplier:     float = 1.0,
-                 margin:         float = 0.0,
-                 forecasted_rates:list[float]|None = None):
-        self.notional = notional
-        self.fixed_rate = fixed_rate
-        self.pricing_date = pricing_date
-        self.maturity_date = maturity_date
-        self.frequency  = frequency
-        self.multiplier = multiplier
-        self.margin = margin
-        self.forecasted_rates= forecasted_rates
-        self.dcc = DayCountConvention(convention_days)
+                 frequency: int = 1,
+                 multiplier: float = 1.0,
+                 margin: float = 0.0,
+                 discount_curve: Callable[[float], float] = None,
+                 forward_curve:  Callable[[float, float], float] = None):
+        self.notional       = notional
+        self.fixed_rate     = fixed_rate
+        self.pricing_date   = pricing_date
+        self.maturity_date  = maturity_date
+        self.dcc            = DayCountConvention(convention_days)
+        self.frequency      = frequency
+        self.multiplier     = multiplier
+        self.margin         = margin
+        self.discount_curve = discount_curve
+        self.forward_curve  = forward_curve
 
-    def _annuity(self, df_curve) -> float:
-        dates = self.generate_schedule(self.pricing_date,
+    def _annuity(self, df: Callable[[float], float]) -> float:
+        dates    = self.generate_schedule(self.pricing_date,
                                           self.maturity_date,
                                           self.frequency)
         accruals = self.compute_accruals(dates,
                                          self.pricing_date,
                                          self.dcc.convention)
-        dfs = np.array([
-            df_curve(self.dcc.year_fraction(self.pricing_date, d))
-            for d in dates
-        ])
-        return float(np.sum(accruals * dfs))
+        # liste de dfs en floats
+        dfs = [df(self.dcc.year_fraction(self.pricing_date, d))
+               for d in dates]
+        return float(sum(a * df_i for a, df_i in zip(accruals, dfs)))
 
-    def _pv_float_leg(self, df_curve) -> float:
-        """
-        PV de la jambe flottante = Σ_j N·(multiplier·L_j + margin)·Δ_j·DF(0→t_j)
-        où L_j est soit forecasted_rates[j], soit calculé par :
-          L_j = (DF(t_{j-1})/DF(t_j) − 1) / Δ_j
-        """
-        dates = self.generate_schedule(self.pricing_date,
+    def _pv_float_leg(self,
+                      df:  Callable[[float], float],
+                      fwd: Callable[[float, float], float] | None) -> float:
+        dates    = self.generate_schedule(self.pricing_date,
                                           self.maturity_date,
                                           self.frequency)
         accruals = self.compute_accruals(dates,
                                          self.pricing_date,
                                          self.dcc.convention)
 
-        # On calcule les factors d'actualisation
-        t_js = np.array([self.dcc.year_fraction(self.pricing_date, d)
-                         for d in dates])
-        dfs = np.vectorize(df_curve)(t_js)
+        # maturités en années, sous forme de liste de floats
+        t_js = [self.dcc.year_fraction(self.pricing_date, d) for d in dates]
+        dfs  = [df(t) for t in t_js]
 
-        # 1) forward implicites si pas de forecasted_rates
-        if self.forecasted_rates is None:
-            # on a besoin aussi des DF(t_{j-1})
-            t_jm1 = np.concatenate([[0.0], t_js[:-1]])
-            df_jm1 = np.vectorize(df_curve)(t_jm1)
-            forwards = (df_jm1/dfs - 1) / accruals
+        # maturités précédentes t_{j-1}, en commençant par 0.0
+        prev_ts = [0.0] + t_js[:-1]
+
+        # calcul des forwards
+        if fwd is not None:
+            forwards = [ fwd(float(t0), float(t1))
+                         for t0, t1 in zip(prev_ts, t_js) ]
         else:
-            forwards = np.array(self.forecasted_rates)
+            # bootstrapping implicite
+            forwards = [ (df(t0)/df(t1) - 1) / accr
+                         for t0, t1, accr in zip(prev_ts, t_js, accruals) ]
 
-        # 2) montants de chaque paiement
-        payments = (self.multiplier * forwards + self.margin) \
-                   * self.notional * accruals
+        # montants des flux flottants
+        payments = [ (self.multiplier * f + self.margin)
+                        * self.notional * accr
+                     for f, accr in zip(forwards, accruals) ]
 
-        # 3) PV = somme des payments actualisés
-        return float(np.sum(payments * dfs))
+        # PV = Σ paiement_j * DF(t_j)
+        return float(sum(p * d for p, d in zip(payments, dfs)))
 
-    def swap_rate(self, df_curve) -> float:
+    def swap_rate(self,
+                  df_curve: Callable[[float], float] | None = None
+                 ) -> float:
         """
-        Par rate pur = (1-DF(T)) / Σ Δ_j·DF(t_j)
+        Par rate pur = (1 - DF(T)) / Σ Δ_j·DF(t_j)
         """
-        T = self.dcc.year_fraction(self.pricing_date, self.maturity_date)
-        DFt = df_curve(T)
-        A = self._annuity(df_curve)
-        return (1 - DFt) / A
+        df = df_curve or self.discount_curve
+        T  = self.dcc.year_fraction(self.pricing_date, self.maturity_date)
+        DF = df(T)
+        A  = self._annuity(df)
+        return (1 - DF) / A
 
-    def mtm(self, df_curve) -> float:
+    def mtm(self,
+            df_curve:  Callable[[float], float]        | None = None,
+            fwd_curve: Callable[[float, float], float] | None = None
+           ) -> float:
         """
-        MtM = PV_float_leg(total) – PV_fixed_leg
-        si fixed_rate=None, on prend swap_rate ⇒ MtM≈0
+        MtM = PV_float_leg – PV_fixed_leg
+        si fixed_rate=None, on prend swap_rate(df)
         """
-        R = self.fixed_rate if self.fixed_rate is not None else self.swap_rate(df_curve)
-        A = self._annuity(df_curve)
+        df  = df_curve or self.discount_curve
+        fwd = fwd_curve or self.forward_curve
+
+        # 1) trouver le coupon fixe
+        R = self.fixed_rate if self.fixed_rate is not None else self.swap_rate(df)
+
+        # 2) PV jFixed
+        A        = self._annuity(df)
         pv_fixed = self.notional * R * A
-        pv_float = self._pv_float_leg(df_curve)
+
+        # 3) PV jFloat
+        pv_float = self._pv_float_leg(df, fwd)
+
         return float(pv_float - pv_fixed)
+
 
 # Usage exemple
 
@@ -402,22 +460,12 @@ if __name__ == "__main__":
     )
     print("Fixed Rate Bond price:", round(frb.price(df_curve), 2))
 
-    # === 4) Floating Rate Bond ===
-    # Génération des taux forward pour chaque période de paiement
-    dates = frb.generate_schedule(valuation_date, maturity, freq)
-    dcc = DayCountConvention("Actual/365")
-    t_js = [dcc.year_fraction(valuation_date, d) for d in dates]
-    forwards = [
-        fwd_curve(t_js[i - 1] if i > 0 else 0.0, t_js[i])
-        for i in range(len(t_js))
-    ]
-
     flo = FloatingRateBond(
         face_value=face_value,
         margin=0.002,
         pricing_date=valuation_date,
         maturity_date=maturity,
-        forecasted_rates=forwards,
+        forward_curve=fwd_curve,
         convention_days="Actual/365",
         frequency=freq,
         multiplier=1.0
@@ -457,9 +505,9 @@ if __name__ == "__main__":
         maturity_date=maturity,
         convention_days="30/360",
         frequency=freq,
-        forecasted_rates=forwards,
         multiplier=1.0,
-        margin=0.0
+        margin=0.0,
+        forward_curve=fwd_curve
     )
     print("Swap MtM (payer fixe):", round(swap.mtm(df_curve), 2), "€")
     print(f"Swap par rate: {swap.swap_rate(df_curve) * 100:.2f}%")
