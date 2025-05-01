@@ -1,6 +1,6 @@
 # streamlit_pricer_all_categories.py
 import streamlit as st
-from datetime import datetime, time as _time
+from datetime import datetime, time as _time, date
 from datetime import timedelta
 import inspect
 from investment_strategies.structured_strategies import SweetAutocall
@@ -80,6 +80,8 @@ for tab, category in zip(tabs, Category):
             key = f"{category.name}-{prod.name}-{s['name']}"
             vals[s["name"]] = w(s["label"], key=key, **kw)
 
+        
+
         if prod.value is SweetAutocall:
             vals["obs_dates"] = st.date_input(
                 "Observation Dates",
@@ -121,6 +123,8 @@ for tab, category in zip(tabs, Category):
 
             for k, v in vals.items():
                 if isinstance(v, datetime):
+                    vals[k] = datetime(v.year, v.month, v.day)
+                elif isinstance(v, date):
                     vals[k] = datetime(v.year, v.month, v.day)
 
 
