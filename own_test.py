@@ -71,7 +71,7 @@ market_lvmh = create_market(
     hist_window   = 252,
     curve_method  = "svensson",        # méthode de calibration
     curve_kwargs  = {"initial_guess": sv_guess},
-    dcc           = "Actual/365",
+    dcc           = "Actual/Actual",
 )
 
 #market_lvmh.div_date = datetime(2026,1,1) # à ajouter dans le create_market si demandé par l'user

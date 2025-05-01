@@ -265,7 +265,8 @@ def plot_strategy_payoff(strategy, S_range=None, buffer: float = 0.5):
     ax.grid(True, linestyle=":", alpha=0.7)
     ax.legend(loc="best", frameon=False)
     plt.tight_layout()
-    plt.show()
+
+    return fig
 
 
 if __name__ == "__main__":

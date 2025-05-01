@@ -33,8 +33,14 @@ class DayCountConvention:
         :param end_date: date de fin (datetime.date ou datetime.datetime)
         :return: fraction d'année (float)
         """
+
+
         if not isinstance(start_date, datetime) or not isinstance(end_date, datetime):
-            raise TypeError("start_date et end_date doivent être des instances de datetime.date ou datetime.datetime")
+            try:
+                start_date = datetime.combine(start_date, datetime.min.time())
+                end_date = datetime.combine(end_date, datetime.min.time())
+            except TypeError:
+                raise TypeError(f"start_date et end_date doivent être des instances de datetime.date ou datetime.datetime. start_date: {start_date}, end_date: {end_date}")
 
         delta_days = (end_date - start_date).days
 

@@ -45,7 +45,7 @@ class OptionPortfolio:
     def intrinsic_value(self, S_slices):
         """
         Calcule la valeur intrinsèque du portefeuille d'options.
-        :param S_slices: Matrice des prix simulés pour chaque option.
+        :param S_slicDownAndOutCalles: Matrice des prix simulés pour chaque option.
         :return: Valeur totale du portefeuille d'options.
         """
         total_value = 0
@@ -140,7 +140,7 @@ class BarrierOption(Option):
         self.direction = direction  # "up" ou "down"
         self.knock_type = knock_type  # "in" ou "out"
         self.rebate = rebate
-        self.name = f'{self.__class__.__name__}, K={self.K}, T={self.T.date()}, exercise={self.exercise}'
+        self.name = f'{self.__class__.__name__}, K={self.K}, T={self.T}, exercise={self.exercise}'
 
     def is_barrier_triggered(self, S):
         """
