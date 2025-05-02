@@ -1,14 +1,13 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from typing import Any, Sequence, Union
-from pricers.mc_pricer import MonteCarloEngine
 from pricers.tree_pricer import TreeModel, TreePortfolio
 from pricers.bs_pricer import BSPortfolio
 
 from risk_metrics.rate_product_sensitivity import dv01, duration, convexity
 from risk_metrics.greeks import GreeksCalculator
 
-from rate.product import (
+from rate.products import (
     ZeroCouponBond,
     FixedRateBond,
     FloatingRateBond,
@@ -228,14 +227,15 @@ class SensitivityAnalyzer:
 
 
 if __name__ == "__main__":
+
+    # Version non aboutie du module dans le temps imparti
+
     from datetime import datetime, timedelta
     import numpy as np
 
     from market.market_factory import create_market
     from option.option import OptionPortfolio
-    from investment_strategies.vanilla_strategies import (
-        BearCallSpread, BullCallSpread, ButterflySpread, Straddle
-    )
+    from investment_strategies.vanilla_strategies import BullCallSpread
     from pricers.mc_pricer import MonteCarloEngine
 
     # 1) Construction du marché au 25/04/2023
