@@ -92,8 +92,8 @@ if __name__ == "__main__":
     DR = DataRetriever("LVMH")
 
     date = datetime(year=2023,month=10,day=1)
-    curve = DR.get_risk_free_curve(date) / 100
-    spot = DR.get_risk_free_index(date) /100
+    curve = DR.get_risk_free_curve(date)
+    spot = DR.get_risk_free_index(date)
 
     maturity = np.array([tenor_to_years(t) for t in curve.index])
     mat = np.arange(maturity[0], maturity[-1], 0.01)

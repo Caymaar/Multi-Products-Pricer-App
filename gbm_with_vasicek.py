@@ -30,8 +30,7 @@ vasicek = VasicekModel(
 
 # === 3. Marché (importé) ===
 # === 1) Définir la date de pricing et la maturité (5 ans) ===
-pricing_date  = datetime(2023, 4, 25)
-maturity_date = datetime(2028, 4, 25)
+pricing_date  = datetime(2024, 4, 25)
 
 # === 2) Paramètres pour Svensson ===
 sv_guess = [0.02, -0.01, 0.01, 0.005, 1.5, 3.5]
@@ -45,9 +44,6 @@ market = create_market(
     curve_kwargs  = {"initial_guess": sv_guess},
     dcc           = "Actual/Actual",
 )
-# === 4. Corrélation ===
-corr_matrix = np.array([[1.0, rho],
-                        [rho, 1.0]])
 
 # === 5. Simulation GBM avec diffusion Vasicek corrélée ===
 gbm = GBMProcess(
@@ -64,6 +60,8 @@ paths = gbm.simulate()  # (n_paths, n_steps + 1)
 
 # === 6. Visualisation ===
 time_grid = np.linspace(0, T, n_steps + 1)
+
+rho = market.corr_matrix.iloc[0, 1]  # Corrélation entre le sous-jacent et le taux
 
 plt.figure(figsize=(10, 5))
 for i in range(min(10, n_paths)):
