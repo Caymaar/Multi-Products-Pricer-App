@@ -76,10 +76,8 @@ class DataRetriever:
         
         delta = (maturity - date).days
 
-        start_date = date - pd.DateOffset(days=2*delta)
-
-        risk_free_index = self.risk_free_index.loc[start_date:date]
-        prices = np.log(self.prices.loc[start_date:date])
+        risk_free_index = self.risk_free_index.loc[date:maturity]
+        prices = np.log(self.prices.loc[date:maturity])
 
         merged_df = pd.merge(risk_free_index, prices, left_index=True, right_index=True)
         merged_df.columns = ['RFR', 'Prices']

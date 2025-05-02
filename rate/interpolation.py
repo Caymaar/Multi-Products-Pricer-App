@@ -90,21 +90,60 @@ if __name__ == "__main__":
     from datetime import datetime
     from data.management.data_utils import tenor_to_years
     from matplotlib import pyplot as plt
+    import pandas as pd
 
     np.random.seed(272)
 
-    DR = DataRetriever("AMAZON")
+    valuation_date = datetime(2023, 10, 1)
+    dr = DataRetriever("AMAZON")
+    curve_spot = dr.get_risk_free_curve(valuation_date) / 100  # en décimal
 
-    date = datetime(year=2023, month=10, day=1)
-    curve = DR.get_risk_free_curve(date) / 100
-    spot = DR.get_risk_free_index(date) / 100
-    maturity = np.array([tenor_to_years(t) for t in curve.index])
+    # convertir les tenors (ex. "1Y", "6M") en années
+    maturities = np.array([tenor_to_years(t) for t in curve_spot.index])
+    zcb = ZeroCouponCurveBuilder(maturities, curve_spot.values)
+    zero_rates = zcb.zero_rates
 
-    zc = ZeroCouponCurveBuilder(maturity, curve.values)
+    # interpolation raffinée (cubic via scipy)
+    interp = RateInterpolation(maturities, zero_rates, kind="refined cubic")
+    interp_y = interp.yield_curve_array(maturities)
 
-    # --- Calibration du modèle ---
-    initial_guess_sv = [0.02, -0.01, 0.01, 0.005, 1.5, 3.5]
-    interp = RateInterpolation(maturity, zc.zero_rates, "refined cubic")
+    # === 2) Afficher les données brutes dans la console ===
+    df_raw = pd.DataFrame({
+        "Maturité (années)": maturities,
+        "Taux zéro brut": zero_rates
+    })
+    print("\nDonnées brutes de taux zéro-coupon :")
+    print(df_raw.to_string(index=False))
 
-    rate_curve = interp.yield_curve_array(maturity)
-    plt.plot(maturity, rate_curve, label="Interpolation cubique")
+    # === 3) Graphique re-sublimé ===
+    plt.figure(figsize=(10, 6))
+
+    # points bruts
+    plt.scatter(maturities,
+                zero_rates,
+                marker="s",
+                label="Taux zéro brut",
+                zorder=5)
+
+    # courbe interpolée
+    plt.plot(maturities,
+             interp_y,
+             linewidth=2,
+             label="Interpolation raffinée (cubic)")
+
+    # annotation de chaque point brut
+    for x, y in zip(maturities, zero_rates):
+        plt.text(x,
+                 y,
+                 f"{y * 100:.2f} %",
+                 ha="center",
+                 va="bottom",
+                 fontsize=8)
+
+    plt.title("Courbe Zéro-Coupon : données brutes vs interpolation")
+    plt.xlabel("Maturité (années)")
+    plt.ylabel("Taux Zéro-Coupon")
+    plt.grid(True)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
