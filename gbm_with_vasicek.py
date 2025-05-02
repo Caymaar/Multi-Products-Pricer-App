@@ -1,9 +1,13 @@
+# Module d'exemple d'utilisation de processus de diffusion GBM avec un modèle de taux Vasicek paramétré manuellement
+
 import numpy as np
 import matplotlib.pyplot as plt
 
 from rate.vasicek import VasicekModel
 from stochastic_process.gbm_process import GBMProcess
-from market.market import Market
+from market.market_factory import create_market
+from datetime import datetime
+
 
 # === 1. Paramètres de simulation ===
 n_paths = 100
@@ -25,14 +29,22 @@ vasicek = VasicekModel(
 )
 
 # === 3. Marché (importé) ===
-market = Market(
-    S0=100,
-    r=0.03,       # taux de référence (inutile ici car Vasicek surpasse)
-    sigma=0.2,
-    dividend=0.0,
-    div_type="continuous"
-)
+# === 1) Définir la date de pricing et la maturité (5 ans) ===
+pricing_date  = datetime(2023, 4, 25)
+maturity_date = datetime(2028, 4, 25)
 
+# === 2) Paramètres pour Svensson ===
+sv_guess = [0.02, -0.01, 0.01, 0.005, 1.5, 3.5]
+# === 3) Instanciation « tout‐en‐un » du Market LVMH ===
+market = create_market(
+    stock         = "LVMH",
+    pricing_date  = pricing_date,
+    vol_source    = "implied",         # ou "historical"
+    hist_window   = 252,
+    curve_method  = "svensson",        # méthode de calibration
+    curve_kwargs  = {"initial_guess": sv_guess},
+    dcc           = "Actual/Actual",
+)
 # === 4. Corrélation ===
 corr_matrix = np.array([[1.0, rho],
                         [rho, 1.0]])
@@ -45,7 +57,6 @@ gbm = GBMProcess(
     n_steps=n_steps,
     t_div=None,
     rate_model=vasicek,
-    correlation_matrix=corr_matrix,
     seed=47
 )
 

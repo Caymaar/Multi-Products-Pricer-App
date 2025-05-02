@@ -1,9 +1,8 @@
 import numpy as np
 from typing import Tuple, List
 from datetime import datetime
-
 from market.day_count_convention import DayCountConvention
-from rate.product import ZeroCouponBond
+from rate.products import ZeroCouponBond
 from option.option import Option, OptionPortfolio
 from market.market import Market
 from stochastic_process.gbm_process import GBMProcess
@@ -49,16 +48,15 @@ class StructuredPricer:
         return zcb.price(self.df_curve)
 
     def simulate_underlying(self,
-                            maturity_date: datetime,
-                            obs_dates: List[datetime],
+                            frequency: str,
                             dcc: DayCountConvention
-                           ) -> Tuple[np.ndarray, np.ndarray]:
+                           ) -> Tuple[np.ndarray, np.ndarray, List[datetime]]:
         """
         Simule un GBM du sous-jacent :
          - S     : array (n_paths, n_steps+1)
          - times : array des year-fractions pour chaque obs_date
         """
-        T = dcc.year_fraction(self.pricing_date, maturity_date)
+        T = dcc.year_fraction(self.pricing_date, self.maturity_date)
         dt = T / self.n_steps
         t_div = None
         if self.market.div_date is not None:
@@ -74,11 +72,14 @@ class StructuredPricer:
             seed=self.seed
         )
         S = gbm.simulate()
-        times = np.array([
-            dcc.year_fraction(self.pricing_date, d)
+
+        obs_dates = dcc.schedule(self.pricing_date, self.maturity_date, frequency)
+        times     = np.array([
+            self.dcc.year_fraction(self.pricing_date, d)
             for d in obs_dates
         ])
-        return S, times
+
+        return S, times, obs_dates
 
     def compute_autocall_cashflows(self,
                                    S: np.ndarray,

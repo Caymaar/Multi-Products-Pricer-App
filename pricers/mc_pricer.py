@@ -1,7 +1,10 @@
 import numpy as np
 from scipy.stats import norm
 from datetime import datetime
-from option.option import OptionPortfolio
+try:
+    from option.option import OptionPortfolio
+except:
+    from option import OptionPortfolio
 from pricers.pricing_model import Engine
 from pricers.regression import Regression
 from stochastic_process.gbm_process import GBMProcess

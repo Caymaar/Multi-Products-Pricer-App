@@ -1,12 +1,6 @@
 from enum import Enum
-from pricers.mc_pricer import MonteCarloEngine
-from pricers.tree_pricer import TreePortfolio
-from pricers.bs_pricer import BSPortfolio
 from datetime import datetime, timedelta
-from dateutil.relativedelta import relativedelta
-import numpy as np
 
-from pricers.structured_pricer import StructuredPricer
 from investment_strategies.structured_strategies import (
     ReverseConvertible,
     TwinWin,
@@ -18,13 +12,12 @@ from investment_strategies.structured_strategies import (
 )
 
 from option.option import (
-    OptionPortfolio, Call, Put,
+    Call, Put,
     DigitalCall, DigitalPut,
     UpAndOutCall, DownAndOutPut,
     UpAndInCall, DownAndInPut,
     UpAndOutPut, DownAndOutCall,
-    DownAndOutCall, UpAndInPut,
-    DownAndInCall
+    UpAndInPut, DownAndInCall
 )
 
 from investment_strategies.vanilla_strategies import (
@@ -36,15 +29,13 @@ from investment_strategies.vanilla_strategies import (
     Strip,
     Strangle,
     Condor,
-    PutCallSpread,
-    plot_strategy_payoff
+    PutCallSpread
 )
 
-from rate.product import (
+from rate.products import (
     ZeroCouponBond,
     FixedRateBond,
     FloatingRateBond,
-    ForwardRate,
     ForwardRateAgreement,
     InterestRateSwap
 )
@@ -240,8 +231,8 @@ SPECIFIC_PARAMS = {
             {"name": "CUO_barrier", "widget": "number_input", "label": "CUO Barrier (↑)",    "kwargs": {"value": 120.0}}
         ],
         "SweetAutocall": [
-            {"name": "freq",               "widget": "selectbox", "label": "Fréquence d'observation", "kwargs": {"options": ["Annuel", "Semestriel", "Trimestriel"], "index": 2}},
-            {"name": "coupon_rate",        "widget": "number_input", "label": "Coupon Rate",        "kwargs": {"value": 0.05}},
+            {"name": "frequency",          "widget": "selectbox", "label": "Fréquence d'observation", "kwargs": {"options": ["Annuel", "Semestriel", "Trimestriel"], "index": 2}},
+            {"name": "coupon_rate",        "widget": "number_input", "label": "Coupon Rate (%)",        "kwargs": {"value": 5.00}},
             {"name": "coupon_barrier",     "widget": "number_input", "label": "Coupon Barrier (%)",     "kwargs": {"value": 80.0}},
             {"name": "call_barrier",       "widget": "number_input", "label": "Call Barrier (%)",       "kwargs": {"value": 110.0}},
             {"name": "protection_barrier", "widget": "number_input", "label": "Protection Barrier (%)", "kwargs": {"value": 80.0}},
@@ -262,36 +253,41 @@ SPECIFIC_PARAMS = {
             {"name": "barrier", "widget": "number_input", "label": "Barrier (%)",     "kwargs": {"value": 80.0}}
         ]
     },
-    Category.RATE: {
-        "ZeroCouponBond": [
-            {"name": "face_value", "widget": "number_input", "label": "Nominal (face_value)", "kwargs": {"value": 1000.0}},
-            {"name": "maturity_date", "widget": "date_input", "label": "Maturité", "kwargs": {"value_func": lambda today: datetime(2023, 1, 1) + timedelta(days=365)}},
-        ],
-        "FixedRateBond": [
-            {"name": "face_value", "widget": "number_input", "label": "Nominal (face_value)", "kwargs": {"value": 1000.0}},
-            {"name": "maturity_date", "widget": "date_input", "label": "Maturité", "kwargs": {"value_func": lambda today: datetime(2023, 1, 1) + timedelta(days=365)}},
-            {"name": "coupon_rate", "widget": "number_input", "label": "Taux de coupon", "kwargs": {"value": 0.05}},
-            {"name": "frequency",   "widget": "number_input", "label": "Fréquence/an",   "kwargs": {"value": 1}}
-        ],
-        "FloatingRateBond": [
-            {"name": "face_value", "widget": "number_input", "label": "Nominal (face_value)", "kwargs": {"value": 1000.0}},
-            {"name": "maturity_date", "widget": "date_input", "label": "Maturité", "kwargs": {"value_func": lambda today: datetime(2023, 1, 1) + timedelta(days=365)}},
-            {"name": "margin",     "widget": "number_input", "label": "Margin",      "kwargs": {"value": 0.0}},
-            {"name": "frequency",  "widget": "number_input", "label": "Fréquence/an", "kwargs": {"value": 1}},
-            {"name": "multiplier", "widget": "number_input", "label": "Multiplier",  "kwargs": {"value": 1.0}},
-        ],
-        "ForwardRateAgreement": [
-            {"name": "notional", "widget": "number_input", "label": "Nominal", "kwargs": {"value": 1000.0}},
-            {"name": "start_date", "widget": "date_input",   "label": "Start FRA",  "kwargs": {"value_func": lambda today: datetime(2024, 1, 1) + timedelta(days=30)}},
-            {"name": "end_date",   "widget": "date_input",   "label": "End FRA",    "kwargs": {"value_func": lambda today: datetime(2024, 1, 1) + timedelta(days=90)}}
-        ],
-        "InterestRateSwap": [
-            {"name": "notional", "widget": "number_input", "label": "Nominal", "kwargs": {"value": 1000.0}},
-            {"name": "maturity_date", "widget": "date_input", "label": "Maturité", "kwargs": {"value_func": lambda today: datetime(2023, 1, 1) + timedelta(days=365)}},
-            {"name": "fixed_rate", "widget": "number_input", "label": "Fixed rate",  "kwargs": {"value": 0.05}},
-            {"name": "frequency",  "widget": "number_input", "label": "Fréquence/an", "kwargs": {"value": 1}},
-            {"name": "multiplier", "widget": "number_input", "label": "Multiplier",  "kwargs": {"value": 1.0}},
-            {"name": "margin",     "widget": "number_input", "label": "Margin",      "kwargs": {"value": 0.0}}
-        ]
-    }
+    Category.RATE : {
+    "ZeroCouponBond": [
+        {"name": "face_value", "widget": "number_input", "label": "Nominal", "kwargs": {"value": 1000.0}},
+        {"name": "maturity_date", "widget": "date_input", "label": "Maturité",
+         "kwargs": {"value_func": lambda today: today + timedelta(days=365)}},
+    ],
+    "FixedRateBond": [
+        {"name": "face_value", "widget": "number_input", "label": "Nominal", "kwargs": {"value": 1000.0}},
+        {"name": "maturity_date", "widget": "date_input", "label": "Maturité",
+         "kwargs": {"value_func": lambda today: today + timedelta(days=365)}},
+        {"name": "coupon_rate", "widget": "number_input", "label": "Taux de coupon", "kwargs": {"value": 5.00}},
+        {"name": "frequency", "widget": "selectbox", "label": "Fréquence", "kwargs": {
+            "options": ["Annuel", "Semestriel", "Trimestriel"],
+            "index": 1
+        }},
+    ],
+    "FloatingRateBond": [
+        {"name": "face_value", "widget": "number_input", "label": "Nominal", "kwargs": {"value": 1000.0}},
+        {"name": "maturity_date", "widget": "date_input", "label": "Maturité", "kwargs": {"value_func": lambda today: today + timedelta(days=365)}},
+        {"name": "margin", "widget": "number_input", "label": "Margin (s)", "kwargs": {"value": 0.00}},
+        {"name": "frequency", "widget": "selectbox", "label": "Fréquence", "kwargs": {"options": ["Annuel", "Semestriel", "Trimestriel"],"index": 1}},
+        {"name": "multiplier", "widget": "number_input", "label": "Multiplier (M)", "kwargs": {"value": 1.00}},
+    ],
+    "ForwardRateAgreement": [
+        {"name": "notional", "widget": "number_input", "label": "Nominal", "kwargs": {"value": 1_000_000.0}},
+        {"name": "start_date", "widget": "date_input", "label": "Start FRA","kwargs": {"value_func": lambda today: today + timedelta(days=30)}},
+        {"name": "end_date", "widget": "date_input", "label": "End FRA","kwargs": {"value_func": lambda today: today + timedelta(days=120)}},
+        {"name": "reference_rate", "widget": "selectbox", "label": "Reference", "kwargs": {"options": ["Overnight", "3M"],"index": 1}},
+    ],
+    "InterestRateSwap": [
+        {"name": "notional", "widget": "number_input", "label": "Nominal", "kwargs": {"value": 1_000_000.0}},
+        {"name": "start_date", "widget": "date_input", "label": "Date de départ", "kwargs": {"value_func": lambda today: today + timedelta(days=2)}},
+        {"name": "end_date", "widget": "date_input", "label": "Date de maturité","kwargs": {"value_func": lambda today: today + timedelta(days=365 * 5)}},
+        {"name": "frequency", "widget": "selectbox", "label": "Fréquence", "kwargs": {"options": ["Annuel", "Semestriel", "Trimestriel"],"index": 1}},
+        {"name": "spread", "widget": "number_input", "label": "Margin (s)", "kwargs": {"value": 0.00}},
+        {"name": "multiplier", "widget": "number_input", "label": "Multiplier (M)", "kwargs": {"value": 1.00}},
+    ]}
 }

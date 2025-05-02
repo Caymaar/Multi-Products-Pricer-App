@@ -77,6 +77,27 @@ def get_implied_vol(stock_name: str) -> pd.DataFrame:
         raise FileNotFoundError(f"Fichier d’implied vol introuvable : {file_path}")
     return pd.read_csv(file_path, sep=';')
 
+def read_option_matrix(file_path: Union[str, Path]) -> pd.DataFrame:
+    """
+    Lit un fichier Excel où :
+      - la première colonne est 'Maturity' (chaînes '1W','3M','1Y',…)
+      - la première ligne (hors en-tête) sont les strikes (ex. 1000, 1050,…)
+      - les cellules sont les volatilités implicites
+
+    Renvoie un DataFrame “long” à 3 colonnes : ['maturity', 'strike', 'iv']
+    """
+    df = pd.read_excel(file_path, index_col=0)
+    # df.index = maturities (ex. '1W','3M','1Y'…)
+    # df.columns = strikes (ex. 1000, 1025,…)
+    df = df.reset_index().melt(
+        id_vars=df.index.name or "Maturity",
+        var_name="strike",
+        value_name="iv"
+    )
+    df.columns = ["maturity", "strike", "iv"]
+    return df
+
+
 def tenor_to_years(tenor: str, start_date: datetime.date = None, dcc: str = "Actual/365") -> float:
     from dateutil.relativedelta import relativedelta
 

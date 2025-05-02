@@ -2,7 +2,11 @@ import numpy as np
 from pricers.node import Node
 from pricers.pricing_model import Engine
 from collections import defaultdict
-from option.option import OptionPortfolio
+try:
+    from option.option import OptionPortfolio
+except:
+    from option import OptionPortfolio
+
 
 class TreePortfolio:
     def __init__(self, market, option_ptf: OptionPortfolio, pricing_date, n_steps):

@@ -5,7 +5,7 @@ from market.market import Market
 
 class GBMProcess(AbstractStochasticProcess):
     # ---------------- GBMProcess Class ----------------
-    def __init__(self, market : Market, dt : float , n_paths : int, n_steps: int, t_div: float, rate_model=None, compute_antithetic=False, seed=None):
+    def __init__(self, market : Market, dt : float , n_paths : int, n_steps: int, t_div: float = None, rate_model=None, compute_antithetic=False, seed=None):
         super().__init__(n_paths, n_steps, dt, seed)
         self.market = market
         self.paths_scalar = None

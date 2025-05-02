@@ -1,24 +1,22 @@
-# streamlit_pricer_all_categories.py
 import streamlit as st
 from datetime import datetime, time as _time, date
-from datetime import timedelta
 import inspect
-from investment_strategies.structured_strategies import SweetAutocall
 
 from market.market_factory import create_market
 from pricers.structured_pricer import StructuredPricer
 from pricers.mc_pricer import MonteCarloEngine
 from pricers.tree_pricer import TreePortfolio
-from pricers.bs_pricer import BSPortfolio
-from rate.product import (
+
+from investment_strategies.vanilla_strategies import plot_strategy_payoff
+from rate.products import (
     ZeroCouponBond, FixedRateBond, FloatingRateBond,
-    ForwardRateAgreement, InterestRateSwap, ForwardRate
+    ForwardRateAgreement, InterestRateSwap
 )
 from risk_metrics.greeks import GreeksCalculator
 from option.option import OptionPortfolio
-from market.day_count_convention import DayCountConvention
 
-from app import Category, COMMON_PARAMS, SPECIFIC_PARAMS, plot_strategy_payoff, Sensitivity
+
+from app import Category, COMMON_PARAMS, SPECIFIC_PARAMS, Sensitivity
 import pandas as pd
 
 def get_init_parameters(cls_or_fn):
@@ -91,12 +89,14 @@ for tab, category in zip(tabs, Category):
                 if isinstance(value, (int, float)):
                     if "strike" in key.lower() or "barrier" in key.lower() or key == "K":
                         vals[key] = value * market.S0 /100
-            # insert pricing_date if needed
+                    if "coupon_rate" in key.lower() or "call_barrier" in key.lower() or "protection_barrier" in key.lower() or "coupon_barrier" in key.lower():
+                        vals[key] = value / 100
             if "pricing_date" in get_init_parameters(prod.value):
                 vals["pricing_date"] = pricing_date
 
             if "convention_days" in get_init_parameters(prod.value):
                 vals["convention_days"] = dcc
+
 
             for k, v in vals.items():
                 if isinstance(v, datetime):
@@ -113,7 +113,7 @@ for tab, category in zip(tabs, Category):
                     df_curve=market.discount, maturity_date=vals["maturity_date"], 
                     n_paths=n_paths, n_steps=n_steps, seed=seed, compute_antithetic=True
                 )
-                price = inst.price(pr)
+                price = inst.price(pr) / inst.notional * 100
 
             elif category is Category.OPTION:
                 inst = prod.value(**vals)
@@ -130,7 +130,7 @@ for tab, category in zip(tabs, Category):
                 
                 gc = GreeksCalculator(eng)
                 greeks = gc.all_greeks()
-                df_results = pd.DataFrame([greeks], columns=["delta", "gamma", "vega", "thtea", "rho", "speed"])
+                df_results = pd.DataFrame([greeks], columns=["delta", "gamma", "vega", "theta", "rho", "speed"])
                 df_results = df_results.T.rename(columns={0: "value"}).T
                 
 
@@ -154,39 +154,46 @@ for tab, category in zip(tabs, Category):
                 st.pyplot(plot_strategy_payoff(strat))
                 gc = GreeksCalculator(eng)
                 greeks = gc.all_greeks()
-                df_results = pd.DataFrame([greeks], columns=["delta", "gamma", "vega", "thtea", "rho", "speed"])
+                df_results = pd.DataFrame([greeks], columns=["delta", "gamma", "vega", "theta", "rho", "speed"])
                 df_results = df_results.T.rename(columns={0: "value"}).T
 
             elif category is Category.RATE:
 
-                if prod.value in [FloatingRateBond, InterestRateSwap]:
+                if prod.value in [FloatingRateBond]:
                     vals["forward_curve"] = market.forward
-
-                
 
                 if prod.value in [ZeroCouponBond, FixedRateBond, FloatingRateBond]:
                     inst = prod.value(**vals)
-                    price = inst.price(market.discount)
+                    price = inst.price(df_curve=market.discount) / inst.face_value * 100 if prod.value is ZeroCouponBond else inst.price(df_curve=market.discount)
                 elif prod.value is InterestRateSwap:
                     inst = prod.value(**vals)
-                    price = inst.mtm(market.discount)
-                    swap_rate = inst.swap_rate(market.discount)
+                    swap_rate = inst.swap_rate(discount_df=market.discount, forward_zc=market.forward)
+                    price = inst.mtm(discount_df=market.discount,forward_zc=market.forward)
                     st.success(f"Swap Rate → {swap_rate:.4%}")
                     
                 else:
-                    init_params_fwd = get_init_parameters(ForwardRate)
+                    init_params_fwd = get_init_parameters(ForwardRateAgreement)
                     fwd_vals = {k: vals[k] for k in init_params_fwd if k in vals}
                     
-                    fwd_rate = ForwardRate(**fwd_vals)
-                    strike = fwd_rate.value(market.discount)
-                    vals["strike"] = strike
-                    inst = prod.value(**vals)
-                    st.success(f"Forward Rate → {strike:.4%}")
-                    price = inst.mtm(market.discount)
+                    fra = ForwardRateAgreement(**fwd_vals)
+                    if vals.get("reference_rate").lower() == "3m":
+                        rate = fra.price(market.forward)
+                        st.success(f"Forward Rate Agreement → {rate:.4%}")
+                        price = fra.mtm(market.discount, market.forward)
+                    else:
+                        rate = fra.price(market.discount)
+                        st.success(f"Forward Rate Agreement → {rate:.4%}")
+                        price = fra.mtm(market.discount, market.discount)
 
             if prod.name in Sensitivity.__members__:
                 sens_cls = Sensitivity[prod.name].value
-                sens = sens_cls(inst, market.discount)
+                if prod.name == "InterestRateSwap":
+                    # On doit passer le forward_zc pour le calcul de la sensibilité
+                    forward_zc = market.forward
+                    sens = sens_cls(inst, market.discount, forward_zc)
+                else:
+                    # On passe le discount curve pour les autres produits
+                    sens = sens_cls(inst, market.discount)
                 sensitivity_data = {
                     "Metric": ["DV01", "Duration", "Convexity"],
                     "Value": [
@@ -196,8 +203,12 @@ for tab, category in zip(tabs, Category):
                     ]
                 }
                 df_results = pd.DataFrame(sensitivity_data)
+                df_results.set_index("Metric", inplace=True)
 
-            st.success(f"Prix {prod.name} → {price:.4f}")
+            if prod.name in ["ForwardRateAgreement", "InterestRateSwap"]:
+                st.success(f"MtM {prod.name} → {price:.4f}")
+            else:
+                st.success(f"Prix {prod.name} → {price:.4f}")
             # Si df_results est défini, l'afficher
             if 'df_results' in locals():
                 st.dataframe(df_results)

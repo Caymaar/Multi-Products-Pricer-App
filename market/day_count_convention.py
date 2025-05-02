@@ -1,5 +1,7 @@
 from datetime import datetime
 import numpy as np
+from typing import List
+from dateutil.relativedelta import relativedelta
 
 class DayCountConvention:
     def __init__(self, convention="Actual/365"):
@@ -76,6 +78,32 @@ class DayCountConvention:
         except:
             raise ValueError(f"Convention non supportée : {self.convention!r}")
 
+    def schedule(self,
+                 start_date: datetime,
+                 end_date:   datetime,
+                 frequency:  str
+                ) -> List[datetime]:
+        """
+        Génère un calendrier entre start_date (exclu) et end_date (inclus),
+        pour 'Annuel', 'Semestriel' ou 'Trimestriel'.
+        """
+        freq = frequency.strip().lower()
+        if   freq == 'annuel':
+            step = relativedelta(years=1)
+        elif freq == 'semestriel':
+            step = relativedelta(months=6)
+        elif freq == 'trimestriel':
+            step = relativedelta(months=3)
+        else:
+            raise ValueError(f"Fréquence inconnue : {frequency!r}")
+
+        dates = []
+        current = start_date + step
+        while current < end_date:
+            dates.append(current)
+            current += step
+        dates.append(end_date)
+        return dates
 
 # Exemple d'utilisation dans un contexte de pricing
 if __name__ == "__main__":

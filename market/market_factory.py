@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Literal, Tuple, Callable, Any, Dict
 import numpy as np
+from dateutil.relativedelta import relativedelta
 
 from data.management.data_retriever import DataRetriever
 from rate.zc_curve import ZCFactory
@@ -44,7 +45,7 @@ def get_discount_forward_and_zero_curves(
     rfr = dr.get_risk_free_curve(date)
     fwd = dr.get_floating_curve(date)
 
-    zcf = ZCFactory(risk_free_curve=rfr,
+    zcf = ZCFactory(risk_free_curve= rfr,
                     floating_curve = fwd,
                     dcc            = dcc)
 
@@ -107,7 +108,8 @@ def create_market(
         )
 
     #4 obtenir la matrice de corrélation spot/taux
-    corr_matrix = dr.get_correlation
+    backed_date = pricing_date - relativedelta(days=hist_window)
+    corr_matrix = dr.get_correlation(date=backed_date,maturity=pricing_date)
 
     # 4) assembler le Market
     return Market(

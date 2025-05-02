@@ -1,5 +1,8 @@
 from market.market import Market
-from option.option import Call, Put, Option, OptionPortfolio
+try:
+    from option.option import Call, Put, Option, OptionPortfolio
+except:
+    from option import Call, Put, Option, OptionPortfolio
 import numpy as np
 import scipy.stats as stats
 from datetime import datetime

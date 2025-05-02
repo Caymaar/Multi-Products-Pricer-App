@@ -89,7 +89,7 @@ if __name__ == "__main__":
     from data.management.data_utils import tenor_to_years
     from datetime import datetime
 
-    DR = DataRetriever("AMAZON")
+    DR = DataRetriever("LVMH")
 
     date = datetime(year=2023,month=10,day=1)
     curve = DR.get_risk_free_curve(date) / 100
@@ -100,6 +100,7 @@ if __name__ == "__main__":
 
     zc = ZeroCouponCurveBuilder(maturity, curve.values, freq=1)
 
+    # Tentative peu fructueuse de calibration par interpolation cubique en amont pour obtenir un dt constant à la calibration...
     zc_rates = zc.build_curve(method='interpolation',kind='refined cubic').yield_curve_array(mat)
 
     VM = VasicekModel.calibrate(zc_rates, 0.01, 1000)

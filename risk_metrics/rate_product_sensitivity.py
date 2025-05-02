@@ -1,6 +1,8 @@
 from typing import Callable
 from market.day_count_convention import DayCountConvention
-from rate.product import (
+from functools import singledispatch
+
+from rate.products import (
     ZeroCouponBond,
     FixedRateBond,
     FloatingRateBond,
@@ -80,13 +82,15 @@ class InterestRateSwapSensitivity:
     """
     def __init__(self,
                  swap: InterestRateSwap,
-                 df_curve: Callable[[float], float]):
+                 df_curve: Callable[[float], float],
+                 forward_zc):
         self.swap     = swap
         self.df       = df_curve
+        self.forward_zc = forward_zc
         # jambe fixe comme un FixedRateBond fictif
         fixed_bond = FixedRateBond(
             face_value    = swap.notional,
-            coupon_rate   = swap.fixed_rate or swap.swap_rate(df_curve),
+            coupon_rate   = swap.fixed_rate or swap.swap_rate(df_curve, forward_zc),
             pricing_date  = swap.pricing_date,
             maturity_date = swap.maturity_date,
             convention_days = swap.dcc.convention,
@@ -96,13 +100,13 @@ class InterestRateSwapSensitivity:
         # (on n’inclut pas le notional en fin de maturité car déjà dans forward leg)
         float_bond = FloatingRateBond(
             face_value       = swap.notional,
-            margin           = swap.margin,
+            margin           = swap.spread,
             pricing_date     = swap.pricing_date,
             maturity_date    = swap.maturity_date,
             convention_days  = swap.dcc.convention,
             frequency        = swap.frequency,
             multiplier       = swap.multiplier,
-            forward_curve    = swap.forward_curve
+            forward_curve    = forward_zc
         )
         self._sens_fixed = FixedRateBondSensitivity(fixed_bond, df_curve)
         self._sens_float = FloatingRateBondSensitivity(float_bond, df_curve)
@@ -127,57 +131,48 @@ class InterestRateSwapSensitivity:
         """Convexity swap = convexity_float − convexity_fixed."""
         return self._sens_float.convexity() - self._sens_fixed.convexity()
 
-from functools import singledispatch
-from rate.product import (  # adapte le chemin si besoin
-    ZeroCouponBond,
-    FixedRateBond,
-    FloatingRateBond,
-    InterestRateSwap
-)
-
 # ———— DV01 générique ————
 @singledispatch
-def dv01(product, df_curve):
+def dv01(product, df_curve, forward_zc=None):
     raise NotImplementedError(f"DV01 non supporté pour {type(product)}")
 
 @dv01.register(ZeroCouponBond)
 @dv01.register(FixedRateBond)
 @dv01.register(FloatingRateBond)
-def _dv01_zc(product, df_curve):
+def _dv01_zc(product, df_curve, forward_zc=None):
     return RateProductSensitivity(product, df_curve).dv01()
 
 @dv01.register(InterestRateSwap)
-def _dv01_swap(swap, df_curve):
-    return InterestRateSwapSensitivity(swap, df_curve).dv01()
-
+def _dv01_swap(swap, df_curve, forward_zc=None):
+    return InterestRateSwapSensitivity(swap, df_curve, forward_zc).dv01()
 
 # ———— Duration générique ————
 @singledispatch
-def duration(product, df_curve):
+def duration(product, df_curve, forward_zc=None):
     raise NotImplementedError(f"Duration non supportée pour {type(product)}")
 
 @duration.register(ZeroCouponBond)
 @duration.register(FixedRateBond)
 @duration.register(FloatingRateBond)
-def _dur_zc(product, df_curve):
+def _dur_zc(product, df_curve, forward_zc=None):
     return RateProductSensitivity(product, df_curve).macaulay_duration()
 
 @duration.register(InterestRateSwap)
-def _dur_swap(swap, df_curve):
-    return InterestRateSwapSensitivity(swap, df_curve).macaulay_duration()
+def _dur_swap(swap, df_curve, forward_zc=None):
+    return InterestRateSwapSensitivity(swap, df_curve, forward_zc).macaulay_duration()
 
 
 # ———— Convexity générique ————
 @singledispatch
-def convexity(product, df_curve):
+def convexity(product, df_curve, forward_zc=None):
     raise NotImplementedError(f"Convexity non supportée pour {type(product)}")
 
 @convexity.register(ZeroCouponBond)
 @convexity.register(FixedRateBond)
 @convexity.register(FloatingRateBond)
-def _conv_zc(product, df_curve):
+def _conv_zc(product, df_curve, forward_zc=None):
     return RateProductSensitivity(product, df_curve).convexity()
 
 @convexity.register(InterestRateSwap)
-def _conv_swap(swap, df_curve):
-    return InterestRateSwapSensitivity(swap, df_curve).convexity()
+def _conv_swap(swap, df_curve, forward_zc=None):
+    return InterestRateSwapSensitivity(swap, df_curve, forward_zc).convexity()

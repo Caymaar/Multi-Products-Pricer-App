@@ -115,15 +115,16 @@ class ImpliedVolatilityCalculator:
             raise Exception("L'optimisation n'a pas convergé.")
 
 
-# Exemple d'utilisation avec un ensemble de données généré
-
 if __name__ == "__main__":
+
+    # Exemple d'utilisation avec un ensemble de données généré
+
     # ---------------- Génération de données de test ----------------
     pricing_date = datetime.strptime("2025-04-04", "%Y-%m-%d")
     maturity_date = datetime.strptime("2026-04-04", "%Y-%m-%d")
 
     # Marché et option
-    market = Market(S0=100, r=0.05, sigma=0.2, dividend=0)
+    market = Market(S0=100, sigma=0.2, zero_rate_curve=0.05,)
     c = Call(K=100, maturity=maturity_date)
     option_ptf = OptionPortfolio([c])
 

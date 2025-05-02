@@ -165,24 +165,38 @@ class Loss:
 
 
 if __name__ == "__main__":
-    from market.market import Market
     from option.option import Call, Put, OptionPortfolio
     from investment_strategies.vanilla_strategies import Straddle
     from pricers.bs_pricer import BSPortfolio
     from pricers.tree_pricer import TreePortfolio
     from pricers.mc_pricer import MonteCarloEngine
 
-    S0 = 917.8
-    r = 0.000045205*365
-    sigma = 0.015*np.sqrt(365)
-    pricing_date = datetime.today()
-    maturity = pricing_date + timedelta(days=365)
-    shift_date = pricing_date + timedelta(days=14) # VaR à 14 jours
+    from market.market_factory import create_market
 
-    market = Market(S0=S0, zero_rate_curve=r, sigma=sigma)
-    call_option = Call(K=925, maturity=maturity)
-    put_option = Put(K=925, maturity=maturity)
+    # === 1) Définir la date de pricing et la maturité (5 ans) ===
+    pricing_date = datetime(2023, 4, 25)
+    maturity_date = datetime(2028, 4, 25)
+
+    # === 2) Paramètres pour Svensson ===
+    sv_guess = [0.02, -0.01, 0.01, 0.005, 1.5, 3.5]
+    # === 3) Instanciation « tout‐en‐un » du Market LVMH ===
+    market = create_market(
+        stock="LVMH",
+        pricing_date=pricing_date,
+        vol_source="implied",  # ou "historical"
+        hist_window=252,
+        curve_method="svensson",  # méthode de calibration
+        curve_kwargs={"initial_guess": sv_guess},
+        dcc="Actual/Actual",
+    )
+
+    K = market.S0 * 0.9
+
+    call_option = Call(K=K, maturity=maturity_date)
+    put_option = Put(K=K, maturity=maturity_date)
     opt_ptf = OptionPortfolio([call_option, put_option]) # Portefeuille quelconque
+
+    shift_date = pricing_date + timedelta(days=30) # VaR à 30 jours
 
     # === Backtest Setup (Black Scholes) ===
     print(f'\n -------- VaR via modèle de Black Scholes --------')
@@ -198,11 +212,11 @@ if __name__ == "__main__":
     print(f"VaR Monte Carlo du Portefeuille : {var_mc}")
 
     # === VaR Cornish Fisher ===
-    var_cf = backtest.run(var_type="CF", alpha=0.05, order=3)
+    var_cf = backtest.run(var_type="CF", alpha=0.05, order=2)
     print(f"VaR Cornish Fisher du Portefeuille : {var_cf}")
 
     # Vérification par stratégie vanille
-    straddle_ptf = Straddle(strike=925, pricing_date=pricing_date, maturity_date=maturity)
+    straddle_ptf = Straddle(strike=K, pricing_date=pricing_date, maturity_date=maturity_date)
     opt_ptf = OptionPortfolio(options=straddle_ptf.options, weights=straddle_ptf.weights)
 
     # === Backtest Setup (Black Scholes) ===
@@ -214,11 +228,11 @@ if __name__ == "__main__":
     print(f"VaR Théorique du Straddle : {var_th}")
 
     # === VaR Monte Carlo ===
-    var_mc = backtest.run(var_type="MC", alpha=0.05, nb_simu=1000)
+    var_mc = backtest.run(var_type="MC", alpha=0.05, nb_simu=100)
     print(f"VaR Monte Carlo du Straddle : {var_mc}")
 
     # === VaR Cornish Fisher ===
-    var_cf = backtest.run(var_type="CF", alpha=0.05, order=3)
+    var_cf = backtest.run(var_type="CF", alpha=0.05, order=2)
     print(f"VaR Cornish Fisher du Straddle: {var_cf}")
 
     # === Backtest Setup (Trinomial) ===
@@ -235,7 +249,7 @@ if __name__ == "__main__":
     print(f"VaR Monte Carlo du Portefeuille : {var_mc}")
 
     # === VaR Cornish Fisher ===
-    var_cf = backtest.run(var_type="CF", alpha=0.05, order=3)
+    var_cf = backtest.run(var_type="CF", alpha=0.05, order=2)
     print(f"VaR Cornish Fisher du Portefeuille : {var_cf}")
 
     # === Backtest Setup (Monte Carlo) ===
@@ -252,7 +266,7 @@ if __name__ == "__main__":
     print(f"VaR Monte Carlo du Portefeuille : {var_mc}")
 
     # === VaR Cornish Fisher ===
-    var_cf = backtest.run(var_type="CF", alpha=0.05, order=3)
+    var_cf = backtest.run(var_type="CF", alpha=0.05, order=2)
     print(f"VaR Cornish Fisher du Portefeuille : {var_cf}")
 
 

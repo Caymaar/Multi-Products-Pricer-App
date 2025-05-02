@@ -1,6 +1,9 @@
 from abc import ABC
 from market.market import Market
-from option.option import OptionPortfolio
+try:
+    from option.option import OptionPortfolio
+except:
+    from option import OptionPortfolio
 from pricers.bs_pricer import BSPortfolio
 import numpy as np
 import datetime

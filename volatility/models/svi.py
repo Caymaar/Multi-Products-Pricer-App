@@ -3,12 +3,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import minimize
 from typing import List
-from volatility.abstract_volatility import VolatilityModel
+from volatility.models.abstract_volatility import VolatilityModel
 from volatility.calibration.svi_params import SVIParams, MarketDataPoint, SVICalibrationParams
-from data.management.manage_bloomberg_data import OptionDataParser
 import pandas as pd
 import os
 from scipy.interpolate import interp1d
+from data.management.data_retriever import DataRetriever
 
 
 class SVI(VolatilityModel):
@@ -141,7 +141,7 @@ class SVI(VolatilityModel):
         # Calcul de la volatilité pour chaque combinaison (strike, maturité)
         for i in range(strikes.shape[0]):
             for j in range(strikes.shape[1]):
-                params = SVIParams(strike=strikes[i, j], maturity=maturities[i, j], spot=spot)
+                params = SVIParams(strike=float(strikes[i, j]), maturity=float(maturities[i, j]), spot=spot)
                 vol_surface[i, j] = self.get_volatility(params)
 
         # Création du plot 3D
@@ -192,44 +192,17 @@ def convert_maturity(maturity_str):
             return np.nan
 
 
-if __name__ == "__main__":
-    # =============================================================
-    # Option 1 : Utiliser les données Bloomberg (déjà au format long)
-    # Assure-toi que le fichier Excel contient déjà les colonnes "maturity", "strike" et "iv".
-    # Décommente cette section si tu travailles avec ce format.
-    # =============================================================
-    DATA_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../data_options"))
-    # file_path = f"{DATA_PATH}/options_data_TSLA 2.xlsx"
-    # df_options = OptionDataParser.prepare_option_data(file_path)
-    # # On suppose que df_options contient déjà les colonnes "maturity", "strike" et "iv".
-    # # Si nécessaire, convertir les types :
-    # df_options["maturity"] = df_options["maturity"].astype(float)
-    # df_options = df_options[df_options["maturity"] <= 1.0] # on garde seulement les maturités inférieur ou égale à 1 ans
-    # df_options["strike"] = df_options["strike"].astype(float)
-    # df_options["vol"] = df_options["vol"].astype(float)
+if __name__ == '__main__':
 
-    # =============================================================
-    # Option 2 : Utiliser le fichier "clean_data_SPX.xlsx" (format wide)
-    # La première colonne "Maturity" contient des maturités sous forme de chaînes ("1W", "1M", "2Y", etc.)
-    # Les autres colonnes sont les strikes avec les valeurs de volatilité.
-    # Décommente cette section si tu travailles avec ce format.
-    # =============================================================
-    file_path = f"{DATA_PATH}/clean_data_SPX.xlsx"
-    df_options = pd.read_excel(file_path)
-    df_options = df_options.melt(
-        id_vars="Maturity",  # La colonne à conserver (maturité sous forme de chaîne)
-        var_name="strike",  # Les anciennes colonnes deviennent la colonne "strike"
-        value_name="iv"  # Les valeurs deviennent la colonne "iv"
-    )
-    # Conversion de "Maturity" en années à l'aide de la fonction convert_maturity
-    df_options["Maturity"] = df_options["Maturity"].apply(convert_maturity)
-    # on garde seulement les maturités inférieur ou égale à 1 ans
-    df_options = df_options[df_options["Maturity"] <= 1.0]
+    # === 1) Charger les données d'options ===
+    DR = DataRetriever("SP500")
+    df_options = DR.get_option_matrix("clean_data_SPX.xlsx")
+
+    # Conversion de la maturité en années
+    df_options["maturity"] = df_options["maturity"].apply(convert_maturity)
+    df_options = df_options[df_options["maturity"] <= 1.0]
     df_options["strike"] = df_options["strike"].astype(float)
     df_options["iv"] = df_options["iv"].astype(float)
-    #
-    # # Uniformisation des noms de colonnes pour la suite
-    df_options.columns = ["maturity", "strike", "iv"]
 
     # =============================================================
     # Paramètres généraux pour la calibration

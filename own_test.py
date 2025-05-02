@@ -81,60 +81,6 @@ market_lvmh = create_market(
 # strike « out‐of‐the‐money » (ici 90% de S0)
 K = market_lvmh.S0 * 0.9
 
-# ------ Backtest sur une option -------
-c = Call(K=K,maturity=maturity_date)
-shift_date = pricing_date + timedelta(days=30)
-
-# === Backtest Setup (Black Scholes) ===
-bse = BSPortfolio(market=market_lvmh, option_ptf=OptionPortfolio([c]), pricing_date=pricing_date)
-backtest = Backtest(model=bse, shift_date=shift_date)
-
-# === VaR Théorique ===
-var_th = backtest.run(var_type="TH", alpha=0.05)
-print(f"VaR Théorique du Straddle : {var_th}")
-
-# === VaR Monte Carlo ===
-var_mc = backtest.run(var_type="MC", alpha=0.05, nb_simu=1000)
-print(f"VaR Monte Carlo du Straddle : {var_mc}")
-
-# === VaR Cornish Fisher ===
-var_cf = backtest.run(var_type="CF", alpha=0.05, order=2)
-print(f"VaR Cornish Fisher du Straddle: {var_cf}")
-
-# === Backtest Setup (Trinomial) ===
-print(f'\n --------  VaR via modèle Trinomial -------- ')
-te = TreePortfolio(market=market_lvmh, option_ptf=OptionPortfolio([c]), pricing_date=pricing_date, n_steps=300)
-backtest = Backtest(model=te, shift_date=shift_date)
-
-# === VaR Théorique ===
-var_th = backtest.run(var_type="TH", alpha=0.05)
-print(f"VaR Théorique du Portefeuille : {var_th}")
-
-# === VaR Monte Carlo ===
-var_mc = backtest.run(var_type="MC", alpha=0.05, nb_simu=100)
-print(f"VaR Monte Carlo du Portefeuille : {var_mc}")
-
-# === VaR Cornish Fisher ===
-var_cf = backtest.run(var_type="CF", alpha=0.05, order=2)
-print(f"VaR Cornish Fisher du Portefeuille : {var_cf}")
-
-# === Backtest Setup (Monte Carlo) ===
-print(f'\n --------  VaR via modèle Monte Carlo -------- ')
-mce = MonteCarloEngine(market=market_lvmh, option_ptf=OptionPortfolio([c]), pricing_date=pricing_date, n_paths=10000, n_steps=300, seed=2)
-backtest = Backtest(model=mce, shift_date=shift_date)
-
-# === VaR Théorique ===
-var_th = backtest.run(var_type="TH", alpha=0.05)
-print(f"VaR Théorique du Portefeuille : {var_th}")
-
-# === VaR Monte Carlo ===
-var_mc = backtest.run(var_type="MC", alpha=0.05, nb_simu=100)
-print(f"VaR Monte Carlo du Portefeuille : {var_mc}")
-
-# === VaR Cornish Fisher ===
-var_cf = backtest.run(var_type="CF", alpha=0.05, order=2)
-print(f"VaR Cornish Fisher du Portefeuille : {var_cf}")
-
 # barrière “up” à 120% de S0,
 # barrière “down” à 80% de S0
 barrier_up   = market_lvmh.S0 * 1.2
@@ -152,17 +98,13 @@ pricer = StructuredPricer(
     compute_antithetic=True
 )
 
-# === 3) Obs dates et coupons pour Sweet Autocall ===
-obs_dates   = [pricing_date + timedelta(days=365*i) for i in (1,2,3,4,5)]
-coupon_rates = [0.05, 0.05, 0.05, 0.05, 0.05]  # 5% par an
-
 # === 4) Instanciation des produits structurés ===
 products = [
     SweetAutocall(
-        freq               = "Annuel",
-        coupon_rate        = 0.05,
+        coupon_rate        = 0.1,
         pricing_date       = pricing_date,
         maturity_date      = maturity_date,
+        frequency         = "Annuel",
         coupon_barrier     = 0.8,           # 80% de S0
         call_barrier       = 1.1,           # 110% de S0
         protection_barrier = 0.8,           # 80% de S0
@@ -224,6 +166,60 @@ for prod in products:
         print(f"   · Duration  = {duration(prod, market_lvmh.discount):.6f}")
         print(f"   · Convexity = {convexity(prod, market_lvmh.discount):.6f}")
     print()
+
+# ------ Backtest sur une option -------
+c = Call(K=K,maturity=maturity_date)
+shift_date = pricing_date + timedelta(days=30)
+
+# === Backtest Setup (Black Scholes) ===
+bse = BSPortfolio(market=market_lvmh, option_ptf=OptionPortfolio([c]), pricing_date=pricing_date)
+backtest = Backtest(model=bse, shift_date=shift_date)
+
+# === VaR Théorique ===
+var_th = backtest.run(var_type="TH", alpha=0.05)
+print(f"VaR Théorique du Straddle : {var_th}")
+
+# === VaR Monte Carlo ===
+var_mc = backtest.run(var_type="MC", alpha=0.05, nb_simu=1000)
+print(f"VaR Monte Carlo du Straddle : {var_mc}")
+
+# === VaR Cornish Fisher ===
+var_cf = backtest.run(var_type="CF", alpha=0.05, order=2)
+print(f"VaR Cornish Fisher du Straddle: {var_cf}")
+
+# === Backtest Setup (Trinomial) ===
+print(f'\n --------  VaR via modèle Trinomial -------- ')
+te = TreePortfolio(market=market_lvmh, option_ptf=OptionPortfolio([c]), pricing_date=pricing_date, n_steps=300)
+backtest = Backtest(model=te, shift_date=shift_date)
+
+# === VaR Théorique ===
+var_th = backtest.run(var_type="TH", alpha=0.05)
+print(f"VaR Théorique du Portefeuille : {var_th}")
+
+# === VaR Monte Carlo ===
+var_mc = backtest.run(var_type="MC", alpha=0.05, nb_simu=100)
+print(f"VaR Monte Carlo du Portefeuille : {var_mc}")
+
+# === VaR Cornish Fisher ===
+var_cf = backtest.run(var_type="CF", alpha=0.05, order=2)
+print(f"VaR Cornish Fisher du Portefeuille : {var_cf}")
+
+# === Backtest Setup (Monte Carlo) ===
+print(f'\n --------  VaR via modèle Monte Carlo -------- ')
+mce = MonteCarloEngine(market=market_lvmh, option_ptf=OptionPortfolio([c]), pricing_date=pricing_date, n_paths=10000, n_steps=300, seed=2)
+backtest = Backtest(model=mce, shift_date=shift_date)
+
+# === VaR Théorique ===
+var_th = backtest.run(var_type="TH", alpha=0.05)
+print(f"VaR Théorique du Portefeuille : {var_th}")
+
+# === VaR Monte Carlo ===
+var_mc = backtest.run(var_type="MC", alpha=0.05, nb_simu=100)
+print(f"VaR Monte Carlo du Portefeuille : {var_mc}")
+
+# === VaR Cornish Fisher ===
+var_cf = backtest.run(var_type="CF", alpha=0.05, order=2)
+print(f"VaR Cornish Fisher du Portefeuille : {var_cf}")
 
 # Options testables avec l'arbre trinomial (pas de barrières ici)
 options_tree = OptionPortfolio([
@@ -353,17 +349,15 @@ print(
     f"Forward rate {start.date()} -> {end.date()}: {fwd.value(df_curve) * 100:.2f}%"
 )
 
-# === 6) FRA 1->2 ans ===
-strike = fwd.value(df_curve)
 fra = ForwardRateAgreement(
     notional=notional,
-    strike=strike,
     pricing_date=pricing_date,
     start_date=start,
     end_date=end,
     convention_days="Actual/365"
 )
-print("FRA MtM (payer fixe):", round(fra.mtm(df_curve), 2), "€")
+print(f"FRA rate (payer fixe): {fra.price(forward_zc=fwd_curve) * 100:.2f}%")
+print("FRA MtM (payer fixe):", round(fra.mtm(discount_df=df_curve, forward_zc=fwd_curve), 2), "€")
 
 # === 7) Swap payer fixe 5 ans semestriel ===
 swap = InterestRateSwap(

@@ -5,6 +5,8 @@ import os
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
 sys.path.append(project_root)
 
+from pathlib import Path
+from data.management.data_utils import read_option_matrix
 from data.management.data_utils import get_price_data, get_rate_data, get_implied_vol, get_zone
 import numpy as np
 from datetime import datetime
@@ -12,7 +14,7 @@ import pandas as pd
 
 RATE_DICT = {
     "RFR": {"EU": "ESTER", "US": "SOFR"},
-    "FORWARD": {"EU": "EURIBOR"}
+    "FORWARD": {"EU": "EURIBOR", "US": "EURIBOR"}
 }
 
 class DataRetriever:
@@ -55,7 +57,16 @@ class DataRetriever:
         common_max = min(prices_range[1], spot_range[1], curve_range[1])
         
         return common_min, common_max
-    
+
+    def get_option_matrix(self, file_name: str) -> pd.DataFrame:
+        """
+        Charge un fichier Excel “wide” d'options depuis data/options/<file_name>
+        et renvoie un DataFrame long ['maturity','strike','iv'].
+        """
+        project_root = Path(__file__).resolve().parents[2]
+        opt_path = project_root / "data" / "options" / file_name
+        return read_option_matrix(opt_path)
+
     def get_implied_volatility(self, date: datetime = None):
         return self.implied
     

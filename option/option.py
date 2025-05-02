@@ -2,9 +2,9 @@ import numpy as np
 from abc import ABC, abstractmethod
 from typing import List
 
-# Warning note :
-# Vanilla & digits options, both american or european style will be priced by any available pricing method (Trinomial or MC)
-# However, Barrier option will be priced by Monte Carlo for european & Longstaff for American, not possible for Trinomial being recombined while adjusting probas and structure
+# Note d'avertissement :
+# Les options vanilles et digitales, qu'elles soient de style américain ou européen, seront valorisées par n'importe quelle méthode de pricing disponible (Trinomial ou MC).
+# Cependant, les options barrières seront valorisées par Monte Carlo pour les européennes et Longstaff pour les américaines, impossible avec Trinomial en raison de la recombinaison tout en ajustant les probabilités et la structure.
 
 # ---------------- Base Option Class ----------------
 class Option(ABC):
@@ -247,3 +247,93 @@ class DownAndInPut(BarrierOption, Put):
         L'option est activée uniquement si le prix touche ou descend en dessous de la barrière (down).
         """
         super().__init__(K, maturity, exercise, barrier, knock_type="in", direction="down", rebate=rebate)
+
+if __name__ == '__main__':
+
+    from pricers.mc_pricer import MonteCarloEngine
+    from pricers.tree_pricer import TreePortfolio
+    from datetime import datetime
+    from market.market_factory import create_market
+
+    # === 1) Définir la date de pricing et la maturité (5 ans) ===
+    pricing_date = datetime(2023, 4, 25)
+    maturity_date = datetime(2028, 4, 25)
+
+    # === 2) Paramètres pour Svensson ===
+    sv_guess = [0.02, -0.01, 0.01, 0.005, 1.5, 3.5]
+    # === 3) Instanciation « tout‐en‐un » du Market LVMH ===
+    market_lvmh = create_market(
+        stock="LVMH",
+        pricing_date=pricing_date,
+        vol_source="implied",  # ou "historical"
+        hist_window=252,
+        curve_method="svensson",  # méthode de calibration
+        curve_kwargs={"initial_guess": sv_guess},
+        dcc="Actual/Actual",
+    )
+
+    K = market_lvmh.S0 * 0.9
+
+    # barrière “up” à 120% de S0,
+    # barrière “down” à 80% de S0
+    barrier_up = market_lvmh.S0 * 1.2
+    barrier_down = market_lvmh.S0 * 0.8
+
+    # Options testables avec l'arbre trinomial (pas de barrières ici)
+    options_tree = OptionPortfolio([
+        Call(K, maturity_date, exercise="european"),
+        Put(K, maturity_date, exercise="european"),
+        DigitalCall(K, maturity_date, exercise="european", payoff=10.0),
+        DigitalPut(K, maturity_date, exercise="european", payoff=10.0),
+        Call(K, maturity_date, exercise="american"),
+        Put(K, maturity_date, exercise="american"),
+        DigitalCall(K, maturity_date, exercise="american", payoff=10.0),
+        DigitalPut(K, maturity_date, exercise="american", payoff=10.0),
+    ])
+
+    # --- Paramètres ---
+    n_paths = 10000
+    n_steps = 300
+    seed = 2
+
+    print("\n====== TRINOMIAL TREE PRICING ======")
+
+    engine = TreePortfolio(
+        market=market_lvmh,
+        option_ptf=options_tree,
+        pricing_date=pricing_date,
+        n_steps=n_steps
+    )
+
+    price = engine.price()
+    print(f"Prix estimé (Trinomial Tree) : {np.round(price, 4)}")
+
+    options = OptionPortfolio([
+        Call(K, maturity_date, exercise="european"),
+        Put(K, maturity_date, exercise="european"),
+        DigitalCall(K, maturity_date, exercise="european", payoff=10.0),
+        DigitalPut(K, maturity_date, exercise="european", payoff=10.0),
+
+        # barrier‐options : barrère au‐dessus de S0 pour les “up”, en dessous pour les “down”
+        UpAndOutCall(K, maturity_date, barrier=barrier_up, rebate=0, exercise="european"),
+        UpAndInCall(K, maturity_date, barrier=barrier_up, rebate=0, exercise="european"),
+        DownAndOutPut(K, maturity_date, barrier=barrier_down, rebate=0, exercise="european"),
+        DownAndInPut(K, maturity_date, barrier=barrier_down, rebate=0, exercise="european"),
+    ])
+
+    print("\n====== EUROPEAN MONTE CARLO PRICING ======")
+
+    engine = MonteCarloEngine(
+        market=market_lvmh,
+        option_ptf=options,
+        pricing_date=datetime.today(),
+        n_paths=n_paths,
+        n_steps=n_steps,
+        seed=seed
+    )
+
+    price = engine.price(type="MC")
+    ci_low, ci_up = engine.price_confidence_interval(type="MC")
+
+    print(f"Prix estimé      : {np.round(price, 4)}")
+    print(f"Intervalle 95%   : [{np.round(ci_low, 4)}, {np.round(ci_up, 4)}]")

@@ -1,11 +1,10 @@
 from investment_strategies.abstract_strategy import Strategy
 from pricers.structured_pricer import StructuredPricer
 import numpy as np
-from rate.product import ZeroCouponBond
+from rate.products import ZeroCouponBond
 from option.option import Option, Call, Put, DigitalCall, UpAndOutCall, DownAndOutPut
 from datetime import datetime
 from typing import List
-from dateutil.relativedelta import relativedelta
 
 
 class StructuredProduct(Strategy):
@@ -44,10 +43,10 @@ class StructuredProduct(Strategy):
             p = engine.price(type=type)
             leg_prices.append((leg, sign, p))
 
-        # 2) Sommez uniquement les achats (sign > 0)
+        # 2) Somme uniquement les achats (sign > 0)
         total_buy = sum(p for _, sign, p in leg_prices if sign > 0)
 
-        # 3) Répartissez l’invested proportionnellement
+        # 3) Répartition de l’invested proportionnellement
         for leg, sign, p in leg_prices:
             if sign > 0:
                 qty = invested / total_buy
@@ -66,8 +65,8 @@ class Autocallable(StructuredProduct):
                  coupon_barrier:     float,
                  call_barrier:       float,
                  protection_barrier: float,
-                 obs_dates:      List[datetime],
-                 coupon_rates:   List[float],
+                 frequency:      str,
+                 coupon_rate:   float,
                  pricing_date:   datetime,
                  maturity_date:  datetime,
                  notional:       float = 1000.0,
@@ -76,8 +75,8 @@ class Autocallable(StructuredProduct):
         self.coupon_barrier = coupon_barrier
         self.call_barrier = call_barrier
         self.protection_barrier = protection_barrier
-        self.obs_dates = obs_dates
-        self.coupon_rates = np.array(coupon_rates)
+        self.frequency = frequency
+        self.coupon_rate = coupon_rate
 
     def get_legs(self) -> List[tuple[ZeroCouponBond | Option, float]]:
         # Pas de legs statiques par défaut
@@ -86,18 +85,19 @@ class Autocallable(StructuredProduct):
     def price(self, pricer: StructuredPricer) -> float:
         pricer.dcc = self.dcc
         #S, _ = pricer.simulate_underlying(self.maturity_date, self.obs_dates)
-        S, times = pricer.simulate_underlying(
-                   maturity_date = pricer.maturity_date,
-                   obs_dates = self.obs_dates,
+        S, times, obs_dates = pricer.simulate_underlying(
+                   frequency = self.frequency,
                    dcc = self.dcc
         )
+        coupon_rates = np.full(len(obs_dates), self.coupon_rate)
+
         cashflows, times = pricer.compute_autocall_cashflows(
             S,
             self.coupon_barrier,
             self.call_barrier,
             self.protection_barrier,
-            self.coupon_rates,
-            self.obs_dates,
+            coupon_rates,
+            obs_dates,
             self.notional
         )
         # actualisation colonne par colonne
@@ -110,13 +110,13 @@ class Autocallable(StructuredProduct):
 class SweetAutocall(Autocallable):
     """
     Sweet Autocall paramétrable :
-      - obs_dates : liste de datetime fournie par l’utilisateur
+       - freq : fréquence de paiement (TRIMESTRIEL, SEMESTRIEL, ANNUEL)
       - coupon_rates : liste des taux annuels correspondants
       - coupon_barrier, call_barrier, protection_barrier : fractions de S₀
     """
     def __init__(self,
-                 freq:                str,
                  coupon_rate:         float,
+                 frequency:           str,
                  pricing_date:        datetime,
                  maturity_date:       datetime,
                  coupon_barrier:      float = 0.8,
@@ -124,37 +124,15 @@ class SweetAutocall(Autocallable):
                  protection_barrier:  float = 0.8,
                  notional:            float = 1000.0,
                  convention_days:     str = "Actual/365"):
-        
-        if freq.upper() == "TRIMESTRIEL":
-            delta = relativedelta(months=3)
-        elif freq.upper() == "SEMESTRIEL":
-            delta = relativedelta(months=6)
-        elif freq.upper() == "ANNUEL":
-            delta = relativedelta(years=1)
-        else:
-            raise ValueError("Fréquence non supportée: {}".format(freq))
 
-        obs_dates = []
-        current_date = pricing_date
-        while current_date < maturity_date:
-            current_date += delta
-            if current_date < maturity_date:
-                obs_dates.append(current_date)
-            else:
-                obs_dates.append(maturity_date)
-                break
 
-        coupon_rates = [coupon_rate] * len(obs_dates)
-
-        if len(obs_dates) != len(coupon_rates):
-            raise ValueError("obs_dates et coupon_rates doivent avoir la même longueur")
         super().__init__(
             name="Sweet Autocall",
             coupon_barrier=coupon_barrier,
             call_barrier=call_barrier,
             protection_barrier=protection_barrier,
-            obs_dates=obs_dates,
-            coupon_rates=coupon_rates,
+            frequency=frequency,
+            coupon_rate=coupon_rate,
             pricing_date=pricing_date,
             maturity_date=maturity_date,
             notional=notional,
@@ -276,3 +254,110 @@ class ReverseConvertibleBarrier(StructuredProduct):
             (Put(self.K, self.maturity_date), -1.0),
             (DownAndOutPut(self.K, self.maturity_date, barrier=self.barrier), +1.0)
         ]
+
+if __name__ == "__main__":
+    from market.market_factory import create_market
+
+    # === 1) Définir la date de pricing et la maturité (5 ans) ===
+    pricing_date = datetime(2023, 4, 25)
+    maturity_date = datetime(2028, 4, 25)
+
+    # === 2) Paramètres pour Svensson ===
+    sv_guess = [0.02, -0.01, 0.01, 0.005, 1.5, 3.5]
+    # === 3) Instanciation « tout‐en‐un » du Market LVMH ===
+    market_lvmh = create_market(
+        stock="LVMH",
+        pricing_date=pricing_date,
+        vol_source="implied",  # ou "historical"
+        hist_window=252,
+        curve_method="svensson",  # méthode de calibration
+        curve_kwargs={"initial_guess": sv_guess},
+        dcc="Actual/Actual",
+    )
+
+    # market_lvmh.div_date = datetime(2026,1,1) # à ajouter dans le create_market si demandé par l'user
+    # market_lvmh.div_type = "discrete" # à ajouter dans le create_market si demandé par l'user
+    # market_lvmh.dividend = 15 # à ajouter dans le create_market si demandé par l'user
+
+    # strike « out‐of‐the‐money » (ici 90% de S0)
+    K = market_lvmh.S0 * 0.9
+
+    # barrière “up” à 120% de S0,
+    # barrière “down” à 80% de S0
+    barrier_up = market_lvmh.S0 * 1.2
+    barrier_down = market_lvmh.S0 * 0.8
+
+    # === 2) StructuredPricer ===
+    pricer = StructuredPricer(
+        market=market_lvmh,
+        pricing_date=pricing_date,
+        df_curve=market_lvmh.discount,
+        maturity_date=maturity_date,
+        n_paths=10_000,
+        n_steps=300,
+        seed=2,
+        compute_antithetic=True
+    )
+
+    # === 4) Instanciation des produits structurés ===
+    products = [
+        SweetAutocall(
+            coupon_rate=0.1,
+            pricing_date=pricing_date,
+            maturity_date=maturity_date,
+            frequency="Annuel",
+            coupon_barrier=0.8,  # 80% de S0
+            call_barrier=1.1,  # 110% de S0
+            protection_barrier=0.8,  # 80% de S0
+            notional=1_000.0,
+            convention_days="Actual/365"
+        ),
+        TwinWin(
+            K=K,
+            pricing_date=pricing_date,
+            maturity_date=maturity_date,
+            PDO_barrier=barrier_down,  # 80% de S0
+            CUO_barrier=barrier_up,  # 120% de S0
+            notional=1_000.0
+        ),
+        ReverseConvertible(
+            K=K,
+            pricing_date=pricing_date,
+            maturity_date=maturity_date,
+            notional=1_000.0
+        ),
+        BonusCertificate(
+            K=K,
+            barrier=barrier_down,  # 80% de S0
+            pricing_date=pricing_date,
+            maturity_date=maturity_date,
+            notional=1_000.0
+        ),
+        CappedParticipationCertificate(
+            K=K,
+            cap=barrier_up,  # 120% de S0
+            pricing_date=pricing_date,
+            maturity_date=maturity_date,
+            notional=1_000.0
+        ),
+        DiscountCertificate(
+            K=K,
+            pricing_date=pricing_date,
+            maturity_date=maturity_date,
+            notional=1_000.0
+        ),
+        ReverseConvertibleBarrier(
+            K=K,
+            barrier=barrier_down,
+            pricing_date=pricing_date,
+            maturity_date=maturity_date,
+            notional=1_000.0
+        )
+    ]
+
+    # === 5) Pricing et affichage ===
+    print("\n====== PRICING DES PRODUITS STRUCTURÉS ======\n")
+    for prod in products:
+        price = prod.price(pricer)
+        pct   = price / prod.notional * 100
+        print(f"{prod.name:35s} → {pct:6.2f}% du notional")

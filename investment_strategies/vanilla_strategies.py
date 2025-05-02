@@ -1,8 +1,7 @@
 from investment_strategies.abstract_strategy import Strategy
 from option.option import OptionPortfolio, Call, Put
-from market.market import Market
 from pricers.mc_pricer import MonteCarloEngine
-from datetime import datetime, timedelta
+from datetime import datetime
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -216,7 +215,7 @@ def plot_strategy_payoff(strategy, S_range=None, buffer: float = 0.5):
     Trace le profil de payoff à maturité pour une stratégie.
     Si S_range n'est pas fourni, on le déduit des strikes :
       - on récupère tous les strikes des options de la stratégie,
-      - on prend [min_strike*(1-buffer) , max_strike*(1+buffer)].
+      - on prend [min_strike*(1-buffer), max_strike*(1+buffer)].
     :param strategy: instance de Strategy (avec get_legs())
     :param S_range: tableau de prix sous-jacent à maturité à tester
     :param buffer: proportion autour des strikes pour étendre la grille
@@ -271,31 +270,90 @@ def plot_strategy_payoff(strategy, S_range=None, buffer: float = 0.5):
 
 if __name__ == "__main__":
 
-    # --- Date de pricing et maturité à +1 an ---
-    pricing_date = datetime.today()
-    maturity_date = pricing_date + timedelta(days=365)
+    from market.market_factory import create_market
 
-    # --- Paramètres marché ---
-    S0 = 100
-    r = 0.05
-    sigma = 0.2
-    div = 0.0
-    K = 100
+    # === 1) Définir la date de pricing et la maturité (5 ans) ===
+    pricing_date = datetime(2023, 4, 25)
+    maturity_date = datetime(2028, 4, 25)
 
-    market = Market(S0, r, sigma, div, div_type="continuous")
+    # === 2) Paramètres pour Svensson ===
+    sv_guess = [0.02, -0.01, 0.01, 0.005, 1.5, 3.5]
+    # === 3) Instanciation « tout‐en‐un » du Market LVMH ===
+    market = create_market(
+        stock="LVMH",
+        pricing_date=pricing_date,
+        vol_source="implied",  # ou "historical"
+        hist_window=252,
+        curve_method="svensson",  # méthode de calibration
+        curve_kwargs={"initial_guess": sv_guess},
+        dcc="Actual/Actual",
+    )
+
+    K = market.S0 * 0.9
+
+    # barrière “up” à 120% de S0,
+    # barrière “down” à 80% de S0
+    barrier_up = market.S0 * 1.2
+    barrier_down = market.S0 * 0.8
 
     # --- Liste de stratégies à tester ---
     strategies = [
-        BearCallSpread(strike_sell=95, strike_buy=105, pricing_date=pricing_date, maturity_date=maturity_date),
-        BullCallSpread(strike_buy=95, strike_sell=105, pricing_date=pricing_date, maturity_date=maturity_date),
-        ButterflySpread(strike_low=90, strike_mid=100, strike_high=110, pricing_date=pricing_date, maturity_date=maturity_date),
-        Straddle(strike=100, pricing_date=pricing_date, maturity_date=maturity_date),
-        Strap(strike=100, pricing_date=pricing_date, maturity_date=maturity_date),
-        Strip(strike=100, pricing_date=pricing_date, maturity_date=maturity_date),
-        Strangle(lower_strike=90, upper_strike=110, pricing_date=pricing_date, maturity_date=maturity_date),
-        Condor(strike1=90, strike2=95, strike3=105, strike4=110, pricing_date=pricing_date, maturity_date=maturity_date),
-        PutCallSpread(strike=100, pricing_date=pricing_date, maturity_date=maturity_date),
+        BearCallSpread(strike_sell=K, strike_buy=K + 30, pricing_date=pricing_date, maturity_date=maturity_date),
+        BullCallSpread(strike_buy=K, strike_sell=K + 30, pricing_date=pricing_date, maturity_date=maturity_date),
+        ButterflySpread(strike_low=K, strike_mid=K + 30, strike_high=K + 60, pricing_date=pricing_date,
+                        maturity_date=maturity_date),
+        Straddle(strike=K, pricing_date=pricing_date, maturity_date=maturity_date),
+        Strap(strike=K, pricing_date=pricing_date, maturity_date=maturity_date),
+        Strip(strike=K, pricing_date=pricing_date, maturity_date=maturity_date),
+        Strangle(lower_strike=K, upper_strike=K + 60, pricing_date=pricing_date, maturity_date=maturity_date),
+        Condor(strike1=K, strike2=K + 15, strike3=K + 50, strike4=K + 65, pricing_date=pricing_date,
+               maturity_date=maturity_date),
+        PutCallSpread(strike=K, pricing_date=pricing_date, maturity_date=maturity_date),
     ]
+
+
+    def price_vanilla_strategy(
+            strategy,
+            market,
+            pricing_date,
+            n_paths: int,
+            n_steps: int,
+            seed: int = None,
+            alpha: float = 0.05,
+            pricing_type: str = "MC",
+            exercise: str = "european"
+    ) -> tuple[float, float, float]:
+        """
+        Prix Monte-Carlo d'une stratégie vanille en une passe.
+        Retourne (prix, CI_bas, CI_haut).
+        """
+        # 1) Récupère toutes les jambes et leurs quantités
+        legs, qtys = zip(*strategy.get_legs())
+        # 2) Pack dans un seul OptionPortfolio en spécifiant le type d'exercice
+        for leg in legs:
+            leg.exercise = exercise
+
+        ptf = OptionPortfolio(list(legs), list(qtys))
+        # 3) Instancie l'engine sur TOUT le portefeuille
+        engine = MonteCarloEngine(
+            market=market,
+            option_ptf=ptf,
+            pricing_date=pricing_date,
+            n_paths=n_paths,
+            n_steps=n_steps,
+            seed=seed
+        )
+        # 4) Calcule prix et intervalle
+        prices = engine.price(type=pricing_type)  # vecteur de prix par option
+        ci_low, ci_up = engine.price_confidence_interval(type="MC", alpha=alpha)
+        # 5) Somme pondérée
+        total_price = float(np.dot(prices, qtys))
+        total_low = float(np.dot(ci_low, qtys))
+        total_up = float(np.dot(ci_up, qtys))
+
+        plot_strategy_payoff(strategy)
+
+        return total_price, total_low, total_up
 
     # --- Paramètres Modèle ---
     n_paths = 100000
@@ -304,66 +362,32 @@ if __name__ == "__main__":
 
     print("\n====== EUROPEAN VANILLA STRATEGIES PRICING ======")
 
-    #--- Pricing des stratégies à caractère européen ---
     for strat in strategies:
-        print(f"\n=== {strat.name} ===")
+        p, low, up = price_vanilla_strategy(
+            strategy=strat,
+            market=market,
+            pricing_date=pricing_date,
+            n_paths=n_paths,
+            n_steps=n_steps,
+            seed=seed,
+            alpha=0.05,
+            pricing_type="MC",
+            exercise="european"
+        )
+        print(f"{strat.name:20s} → Prix: {p:.4f} | CI95%: [{low:.4f}, {up:.4f}]")
 
-        price = 0
-        prices = []
-
-        for leg, quantity in strat.get_legs():
-            engine = MonteCarloEngine(
-                market=market,
-                option_ptf=OptionPortfolio([leg]),
-                pricing_date=pricing_date,
-                n_paths=n_paths,
-                n_steps=n_steps,
-                seed=seed
-            )
-
-            p = engine.price(type="MC")
-            ci_low, ci_up = engine.price_confidence_interval(type="MC")
-
-            prices.append((leg.__class__.__name__, p[0], ci_low[0], ci_up[0], quantity))
-            price += quantity * p[0]
-
-        for leg_name, p, low, high, q in prices:
-            print(f"{leg_name:>15} | Quantité: {q:+} | Prix: {p:.4f} | CI95%: [{low:.4f}, {high:.4f}]")
-
-        print(f"→ Prix total stratégie : {price:.4f}")
-
-        # Ajout du plot du payoff
-        plot_strategy_payoff(strat)
-
-    # --- Pricing des stratégies américaines ---
-    print("\n====== AMERICAN VANILLA STRATEGIES PRICING ======")
+    print("\n====== EUROPEAN AMERICAN STRATEGIES PRICING ======")
 
     for strat in strategies:
-        print(f"\n=== {strat.name} (American) ===")
-
-        price = 0
-        prices = []
-
-        for leg, quantity in strat.get_legs():
-            # Assure que chaque leg est bien en "american"
-            leg.exercise = "american"
-
-            engine = MonteCarloEngine(
-                market=market,
-                option_ptf=OptionPortfolio([leg]),
-                pricing_date=pricing_date,
-                n_paths=n_paths,
-                n_steps=n_steps,
-                seed=seed
-            )
-
-            p = engine.price(type="Longstaff")
-            ci_low, ci_up = engine.price_confidence_interval(type="MC")
-
-            prices.append((leg.__class__.__name__, p[0], ci_low[0], ci_up[0], quantity))
-            price += quantity * p[0]
-
-        for leg_name, p, low, high, q in prices:
-            print(f"{leg_name:>15} | Quantité: {q:+} | Prix: {p:.4f} | CI95%: [{low:.4f}, {high:.4f}]")
-
-        print(f"→ Prix total stratégie : {price:.4f}")
+        p, low, up = price_vanilla_strategy(
+            strategy=strat,
+            market=market,
+            pricing_date=pricing_date,
+            n_paths=n_paths,
+            n_steps=n_steps,
+            seed=seed,
+            alpha=0.05,
+            pricing_type="Longstaff",
+            exercise="american"
+        )
+        print(f"{strat.name:20s} → Prix: {p:.4f} | CI95%: [{low:.4f}, {up:.4f}]")
