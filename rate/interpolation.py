@@ -96,7 +96,7 @@ if __name__ == "__main__":
 
     valuation_date = datetime(2023, 10, 1)
     dr = DataRetriever("AMAZON")
-    curve_spot = dr.get_risk_free_curve(valuation_date) / 100  # en décimal
+    curve_spot = dr.get_risk_free_curve(valuation_date)  # en décimal
 
     # convertir les tenors (ex. "1Y", "6M") en années
     maturities = np.array([tenor_to_years(t) for t in curve_spot.index])

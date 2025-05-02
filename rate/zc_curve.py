@@ -153,7 +153,6 @@ if __name__ == "__main__":
     zcf = ZCFactory(risk_free_curve=rf_curve, floating_curve=fl_curve, dcc=dcc)
     tenors = np.array([tenor_to_years(tenor=t, dcc=dcc) for t in rf_curve.index])
 
-
     # === Paramètres initiaux pour modèles ===
     ns_guess = [0.02, -0.01, 0.01, 1.5]
     sv_guess = [0.02, -0.01, 0.01, 0.005, 1.5, 3.5]
