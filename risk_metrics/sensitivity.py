@@ -1,8 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from typing import Any, Sequence, Union
-
-from own_test import n_steps
 from pricers.mc_pricer import MonteCarloEngine
 from pricers.tree_pricer import TreeModel, TreePortfolio
 from pricers.bs_pricer import BSPortfolio
@@ -110,7 +108,9 @@ class SensitivityAnalyzer:
         vals = []
         for T in maturities:
             # bump maturity sur la stratégie
-            self.strategy.maturity_date = T
+            #self.strategy.maturity_date = T
+            for idx in range(len(self.strategy.options)):
+                self.strategy.options[idx].maturity_date = T
             vals.append(self.strategy.price(self.engine))
         return np.array(vals)
 
@@ -125,7 +125,9 @@ class SensitivityAnalyzer:
         for h in shifts:
             def df_shifted(t: float) -> float:
                 return base.discount(t) * np.exp(-h * t)
-            mkt = base.copy(discount_curve=df_shifted)
+            def zero_rate_shifted(t: float) -> float:
+                return base.zero_rate(t) + h
+            mkt = base.copy(discount_curve=df_shifted, zero_rate_curve=zero_rate_shifted)
             eng = self.engine.recreate_model(market=mkt) if hasattr(self.engine, "recreate_model") else self._deep_copy_engine(mkt)
             vals.append(self.strategy.price(eng))
         return np.array(vals)
@@ -348,6 +350,3 @@ if __name__ == "__main__":
         ylabel="Valeur stratégie",
         title="Sensibilité à la maturité"
     )
-
-
-

@@ -79,7 +79,6 @@ class Structured(Enum):
     ReverseConvertibleBarrier      = ReverseConvertibleBarrier
     SweetAutocall                  = SweetAutocall
 
-
 class Strategy(Enum):
     BearCallSpread  = BearCallSpread
     BullCallSpread  = BullCallSpread
@@ -90,7 +89,6 @@ class Strategy(Enum):
     Strangle        = Strangle
     Condor          = Condor
     PutCallSpread   = PutCallSpread
-
 
 class Rate(Enum):
     ZeroCouponBond       = ZeroCouponBond
@@ -104,7 +102,7 @@ class Sensitivity(Enum):
     FixedRateBond        = FixedRateBondSensitivity
     FloatingRateBond     = FloatingRateBondSensitivity
     InterestRateSwap     = InterestRateSwapSensitivity
-    
+
 class Category(Enum):
     OPTION     = Options
     STRATEGY   = Strategy
@@ -135,34 +133,22 @@ class OptionStrategies(Enum):
     UpAndInPut      = UpAndInPut
     DownAndInPut    = DownAndInPut
 
-
-
-# 2) Blocs de paramètres « communs » à toute la catégorie
 COMMON_PARAMS = {
 Category.OPTION: [
-        {"name": "K", "widget": "number_input", "label": "Strike", "kwargs": {"value": 100.0}},
-        {"name": "maturity", "widget": "date_input", "label": "Maturité", "kwargs": {"value_func": lambda today: today + timedelta(days=365)}},
+        {"name": "K", "widget": "number_input", "label": "Strike (%)", "kwargs": {"value": 100.0}},
+        {"name": "maturity", "widget": "date_input", "label": "Maturité", "kwargs": {"value_func": lambda today: datetime(2023, 1, 1) + timedelta(days=365)}},
         {"name": "exercise", "widget": "selectbox", "label": "Exercice", "kwargs": {"options": ["european", "american"], "index": 0}},
     ],
 Category.STRATEGY: [
-        {"name": "maturity_date", "widget": "date_input", "label": "Maturité", "kwargs": {"value_func": lambda today: today + timedelta(days=365)}},
+        {"name": "maturity_date", "widget": "date_input", "label": "Maturité", "kwargs": {"value_func": lambda today: datetime(2023, 1, 1) + timedelta(days=365)}},
     ],
 Category.STRUCTURED: [
-        {"name": "maturity_date", "widget": "date_input", "label": "Maturité", "kwargs": {"value_func": lambda today: today + timedelta(days=365)}},
+        {"name": "maturity_date", "widget": "date_input", "label": "Maturité", "kwargs": {"value_func": lambda today: datetime(2023, 1, 1) + timedelta(days=365)}},
         {"name": "notional", "widget": "number_input", "label": "Nominal", "kwargs": {"value": 1000.0}},
     ],
 Category.RATE: [
-        {"name": "maturity_date", "widget": "date_input", "label": "Maturité", "kwargs": {"value_func": lambda today: today + timedelta(days=365)}},
-        {"name": "face_value", "widget": "number_input", "label": "Nominal (face_value)", "kwargs": {"value": 1000.0}},
-        {"name": "convention_days", "widget": "selectbox", "label": "Convention de jours", "kwargs": {"options": ["Actual/360", "Actual/365", "30/360"], "index": 1}},
     ],
 }
-
-# STRUCTURED -> StructuredPricer
-# OPTION -> OptionPortfolio(options) -> MonteCarloEngine/TreePortfolio/BSPortfolio
-# STRATEGY -> get_legs() -> OptionPortfolio(options) -> MonteCarloEngine/TreePortfolio/BSPortfolio
-# RATE -> Interpolator -> .price() / .mtm()
-
 
 SPECIFIC_PARAMS = {
     Category.OPTION: {
@@ -209,100 +195,103 @@ SPECIFIC_PARAMS = {
     },
     Category.STRATEGY: {
         "BearCallSpread": [
-            {"name": "strike_sell", "widget": "number_input", "label": "Strike Sell", "kwargs": {"value": 95.0}},
-            {"name": "strike_buy",  "widget": "number_input", "label": "Strike Buy", "kwargs": {"value": 105.0}}
+            {"name": "strike_sell", "widget": "number_input", "label": "Strike Sell (%)", "kwargs": {"value": 95.0}},
+            {"name": "strike_buy",  "widget": "number_input", "label": "Strike Buy (%)", "kwargs": {"value": 105.0}}
         ],
         "PutCallSpread": [
-            {"name": "strike", "widget": "number_input", "label": "Strike", "kwargs": {"value": 100.0}}
+            {"name": "strike", "widget": "number_input", "label": "Strike (%)", "kwargs": {"value": 100.0}}
         ],
         "BullCallSpread": [
-            {"name": "strike_buy", "widget": "number_input", "label": "Strike Buy", "kwargs": {"value": 95.0}},
-            {"name": "strike_sell", "widget": "number_input", "label": "Strike Sell", "kwargs": {"value": 105.0}}
+            {"name": "strike_buy", "widget": "number_input", "label": "Strike Buy (%)", "kwargs": {"value": 95.0}},
+            {"name": "strike_sell", "widget": "number_input", "label": "Strike Sell (%)", "kwargs": {"value": 105.0}}
         ],
         "ButterflySpread": [
-            {"name": "strike_low", "widget": "number_input", "label": "Strike Low", "kwargs": {"value": 90.0}},
-            {"name": "strike_mid", "widget": "number_input", "label": "Strike Mid", "kwargs": {"value": 100.0}},
-            {"name": "strike_high", "widget": "number_input", "label": "Strike High", "kwargs": {"value": 110.0}}
+            {"name": "strike_low", "widget": "number_input", "label": "Strike Low (%)", "kwargs": {"value": 90.0}},
+            {"name": "strike_mid", "widget": "number_input", "label": "Strike Mid (%)", "kwargs": {"value": 100.0}},
+            {"name": "strike_high", "widget": "number_input", "label": "Strike High (%)", "kwargs": {"value": 110.0}}
         ],
         "Straddle": [
-            {"name": "strike", "widget": "number_input", "label": "Strike", "kwargs": {"value": 100.0}}
+            {"name": "strike", "widget": "number_input", "label": "Strike (%)", "kwargs": {"value": 100.0}}
         ],
         "Strap": [
-            {"name": "strike", "widget": "number_input", "label": "Strike", "kwargs": {"value": 100.0}}
+            {"name": "strike", "widget": "number_input", "label": "Strike (%)", "kwargs": {"value": 100.0}}
         ],
         "Strip": [
-            {"name": "strike", "widget": "number_input", "label": "Strike", "kwargs": {"value": 100.0}}
+            {"name": "strike", "widget": "number_input", "label": "Strike (%)", "kwargs": {"value": 100.0}}
         ],
         "Strangle": [
-            {"name": "lower_strike", "widget": "number_input", "label": "Lower Strike", "kwargs": {"value": 90.0}},
-            {"name": "upper_strike", "widget": "number_input", "label": "Upper Strike", "kwargs": {"value": 110.0}}
+            {"name": "lower_strike", "widget": "number_input", "label": "Lower Strike (%)", "kwargs": {"value": 90.0}},
+            {"name": "upper_strike", "widget": "number_input", "label": "Upper Strike (%)", "kwargs": {"value": 110.0}}
         ],
         "Condor": [
-            {"name": "strike1", "widget": "number_input", "label": "Strike 1", "kwargs": {"value": 90.0}},
-            {"name": "strike2", "widget": "number_input", "label": "Strike 2", "kwargs": {"value": 95.0}},
-            {"name": "strike3", "widget": "number_input", "label": "Strike 3", "kwargs": {"value": 105.0}},
-            {"name": "strike4", "widget": "number_input", "label": "Strike 4", "kwargs": {"value": 110.0}}
+            {"name": "strike1", "widget": "number_input", "label": "Strike 1 (%)", "kwargs": {"value": 90.0}},
+            {"name": "strike2", "widget": "number_input", "label": "Strike 2 (%)", "kwargs": {"value": 95.0}},
+            {"name": "strike3", "widget": "number_input", "label": "Strike 3 (%)", "kwargs": {"value": 105.0}},
+            {"name": "strike4", "widget": "number_input", "label": "Strike 4 (%)", "kwargs": {"value": 110.0}}
         ],
     },
     Category.STRUCTURED: {
         "ReverseConvertible": [
-            {"name": "K", "widget": "number_input", "label": "Strike (K)", "kwargs": {"value": 100.0}}
+            {"name": "K", "widget": "number_input", "label": "Strike (%)", "kwargs": {"value": 100.0}}
         ],
         "TwinWin": [
-            {"name": "K",           "widget": "number_input", "label": "Strike (K)",         "kwargs": {"value": 100.0}},
+            {"name": "K",           "widget": "number_input", "label": "Strike (%)",         "kwargs": {"value": 100.0}},
             {"name": "PDO_barrier", "widget": "number_input", "label": "PDO Barrier (↓)",    "kwargs": {"value": 80.0}},
             {"name": "CUO_barrier", "widget": "number_input", "label": "CUO Barrier (↑)",    "kwargs": {"value": 120.0}}
         ],
         "SweetAutocall": [
-            {"name": "coupon_barrier",     "widget": "number_input", "label": "Coupon Barrier",     "kwargs": {"value": 80.0}},
-            {"name": "call_barrier",       "widget": "number_input", "label": "Call Barrier",       "kwargs": {"value": 110.0}},
-            {"name": "protection_barrier", "widget": "number_input", "label": "Protection Barrier", "kwargs": {"value": 80.0}},
+            {"name": "freq",               "widget": "selectbox", "label": "Fréquence d'observation", "kwargs": {"options": ["Annuel", "Semestriel", "Trimestriel"], "index": 2}},
+            {"name": "coupon_rate",        "widget": "number_input", "label": "Coupon Rate",        "kwargs": {"value": 0.05}},
+            {"name": "coupon_barrier",     "widget": "number_input", "label": "Coupon Barrier (%)",     "kwargs": {"value": 80.0}},
+            {"name": "call_barrier",       "widget": "number_input", "label": "Call Barrier (%)",       "kwargs": {"value": 110.0}},
+            {"name": "protection_barrier", "widget": "number_input", "label": "Protection Barrier (%)", "kwargs": {"value": 80.0}},
         ],
         "BonusCertificate": [
-            {"name": "K",        "widget": "number_input", "label": "Strike (K)", "kwargs": {"value": 100.0}},
-            {"name": "barrier",  "widget": "number_input", "label": "Barrier",     "kwargs": {"value": 80.0}}
+            {"name": "K",        "widget": "number_input", "label": "Strike (%)", "kwargs": {"value": 100.0}},
+            {"name": "barrier",  "widget": "number_input", "label": "Barrier (%)",     "kwargs": {"value": 80.0}}
         ],
         "CappedParticipationCertificate": [
-            {"name": "K",   "widget": "number_input", "label": "Strike (K)", "kwargs": {"value": 100.0}},
-            {"name": "cap", "widget": "number_input", "label": "Cap",         "kwargs": {"value": 120.0}}
+            {"name": "K",   "widget": "number_input", "label": "Strike (%)", "kwargs": {"value": 100.0}},
+            {"name": "cap", "widget": "number_input", "label": "Cap (%)",         "kwargs": {"value": 120.0}}
         ],
         "DiscountCertificate": [
-            {"name": "K", "widget": "number_input", "label": "Strike (K)", "kwargs": {"value": 100.0}}
+            {"name": "K", "widget": "number_input", "label": "Strike (%)", "kwargs": {"value": 100.0}}
         ],
         "ReverseConvertibleBarrier": [
-            {"name": "K",       "widget": "number_input", "label": "Strike (K)", "kwargs": {"value": 100.0}},
-            {"name": "barrier", "widget": "number_input", "label": "Barrier",     "kwargs": {"value": 80.0}}
+            {"name": "K",       "widget": "number_input", "label": "Strike (%)", "kwargs": {"value": 100.0}},
+            {"name": "barrier", "widget": "number_input", "label": "Barrier (%)",     "kwargs": {"value": 80.0}}
         ]
     },
     Category.RATE: {
-        "ZeroCouponBond": [],
+        "ZeroCouponBond": [
+            {"name": "face_value", "widget": "number_input", "label": "Nominal (face_value)", "kwargs": {"value": 1000.0}},
+            {"name": "maturity_date", "widget": "date_input", "label": "Maturité", "kwargs": {"value_func": lambda today: datetime(2023, 1, 1) + timedelta(days=365)}},
+        ],
         "FixedRateBond": [
+            {"name": "face_value", "widget": "number_input", "label": "Nominal (face_value)", "kwargs": {"value": 1000.0}},
+            {"name": "maturity_date", "widget": "date_input", "label": "Maturité", "kwargs": {"value_func": lambda today: datetime(2023, 1, 1) + timedelta(days=365)}},
             {"name": "coupon_rate", "widget": "number_input", "label": "Taux de coupon", "kwargs": {"value": 0.05}},
             {"name": "frequency",   "widget": "number_input", "label": "Fréquence/an",   "kwargs": {"value": 1}}
         ],
         "FloatingRateBond": [
+            {"name": "face_value", "widget": "number_input", "label": "Nominal (face_value)", "kwargs": {"value": 1000.0}},
+            {"name": "maturity_date", "widget": "date_input", "label": "Maturité", "kwargs": {"value_func": lambda today: datetime(2023, 1, 1) + timedelta(days=365)}},
             {"name": "margin",     "widget": "number_input", "label": "Margin",      "kwargs": {"value": 0.0}},
-            {"name": "frequency",  "widget": "number_input", "label": "Fréquence/an","kwargs": {"value": 1}},
+            {"name": "frequency",  "widget": "number_input", "label": "Fréquence/an", "kwargs": {"value": 1}},
             {"name": "multiplier", "widget": "number_input", "label": "Multiplier",  "kwargs": {"value": 1.0}},
         ],
         "ForwardRateAgreement": [
-            {"name": "strike",     "widget": "number_input", "label": "Strike (K)", "kwargs": {"value": 0.05}},
-            {"name": "start_date", "widget": "date_input",   "label": "Start FRA",  "kwargs": {"value_func": lambda today: today + timedelta(days=30)}},
-            {"name": "end_date",   "widget": "date_input",   "label": "End FRA",    "kwargs": {"value_func": lambda today: today + timedelta(days=90)}}
+            {"name": "notional", "widget": "number_input", "label": "Nominal", "kwargs": {"value": 1000.0}},
+            {"name": "start_date", "widget": "date_input",   "label": "Start FRA",  "kwargs": {"value_func": lambda today: datetime(2024, 1, 1) + timedelta(days=30)}},
+            {"name": "end_date",   "widget": "date_input",   "label": "End FRA",    "kwargs": {"value_func": lambda today: datetime(2024, 1, 1) + timedelta(days=90)}}
         ],
         "InterestRateSwap": [
+            {"name": "notional", "widget": "number_input", "label": "Nominal", "kwargs": {"value": 1000.0}},
+            {"name": "maturity_date", "widget": "date_input", "label": "Maturité", "kwargs": {"value_func": lambda today: datetime(2023, 1, 1) + timedelta(days=365)}},
             {"name": "fixed_rate", "widget": "number_input", "label": "Fixed rate",  "kwargs": {"value": 0.05}},
-            {"name": "frequency",  "widget": "number_input", "label": "Fréquence/an","kwargs": {"value": 1}},
+            {"name": "frequency",  "widget": "number_input", "label": "Fréquence/an", "kwargs": {"value": 1}},
             {"name": "multiplier", "widget": "number_input", "label": "Multiplier",  "kwargs": {"value": 1.0}},
             {"name": "margin",     "widget": "number_input", "label": "Margin",      "kwargs": {"value": 0.0}}
         ]
     }
 }
-
-# 4) Construction dynamique du PARAM_CONFIG final
-PARAM_CONFIG = {}
-for cat, common in COMMON_PARAMS.items():
-    PARAM_CONFIG[cat] = {}
-    for prod, specific in SPECIFIC_PARAMS.get(cat, {}).items():
-        # on clone la liste common + specific
-        PARAM_CONFIG[cat][prod] = common + specific

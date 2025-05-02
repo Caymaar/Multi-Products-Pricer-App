@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
 from market.day_count_convention import DayCountConvention
+from option.option import OptionPortfolio
+from typing import Optional
 
 # ---------------- Strategy Class Vanille ----------------
 class Strategy(ABC):
@@ -18,6 +20,7 @@ class Strategy(ABC):
         # Initialisation des attributs des options et poids
         self.options = []
         self.weights = []
+
 
     @abstractmethod
     def get_legs(self):
@@ -51,12 +54,12 @@ class Strategy(ABC):
 
         return options, weights
 
-    def price(self, engine):
+    def price(self, engine, type: Optional[str] = "MC"):
         """
         Calcule le prix de la stratégie en agrégeant le prix de chaque actif pondéré par son poids.
+        Cas sur stratégies vanilles, les autres stratégies étant surchargées.
         """
-        total_price = 0
-        for option, weight in self.get_legs():
-            option_price = engine.price(option)
-            total_price += weight * option_price
-        return total_price
+        options, weights = self.get_options_and_weights()
+        ptf = OptionPortfolio(options, weights)
+        engine.options = ptf
+        return engine.price(type)

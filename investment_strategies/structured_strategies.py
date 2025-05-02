@@ -5,6 +5,7 @@ from rate.product import ZeroCouponBond
 from option.option import Option, Call, Put, DigitalCall, UpAndOutCall, DownAndOutPut
 from datetime import datetime
 from typing import List
+from dateutil.relativedelta import relativedelta
 
 
 class StructuredProduct(Strategy):
@@ -24,7 +25,7 @@ class StructuredProduct(Strategy):
     def get_legs(self) -> List[tuple[ZeroCouponBond | Option, float]]:
         raise NotImplementedError
 
-    def price(self, pricer: StructuredPricer) -> float:
+    def price(self, pricer: StructuredPricer, type: str = "MC") -> float:
         pricer.dcc = self.dcc # override du dcc pour inclure celui du produit
         total = 0.0
         # ZCBs
@@ -40,7 +41,7 @@ class StructuredProduct(Strategy):
         leg_prices = []
         for leg, sign in opt_legs:
             engine = pricer.get_mc_engine(leg)
-            p = engine.price(type="MC")
+            p = engine.price(type=type)
             leg_prices.append((leg, sign, p))
 
         # 2) Sommez uniquement les achats (sign > 0)
@@ -114,8 +115,8 @@ class SweetAutocall(Autocallable):
       - coupon_barrier, call_barrier, protection_barrier : fractions de S₀
     """
     def __init__(self,
-                 obs_dates:           List[datetime],
-                 coupon_rates:        List[float],
+                 freq:                str,
+                 coupon_rate:         float,
                  pricing_date:        datetime,
                  maturity_date:       datetime,
                  coupon_barrier:      float = 0.8,
@@ -123,6 +124,28 @@ class SweetAutocall(Autocallable):
                  protection_barrier:  float = 0.8,
                  notional:            float = 1000.0,
                  convention_days:     str = "Actual/365"):
+        
+        if freq.upper() == "TRIMESTRIEL":
+            delta = relativedelta(months=3)
+        elif freq.upper() == "SEMESTRIEL":
+            delta = relativedelta(months=6)
+        elif freq.upper() == "ANNUEL":
+            delta = relativedelta(years=1)
+        else:
+            raise ValueError("Fréquence non supportée: {}".format(freq))
+
+        obs_dates = []
+        current_date = pricing_date
+        while current_date < maturity_date:
+            current_date += delta
+            if current_date < maturity_date:
+                obs_dates.append(current_date)
+            else:
+                obs_dates.append(maturity_date)
+                break
+
+        coupon_rates = [coupon_rate] * len(obs_dates)
+
         if len(obs_dates) != len(coupon_rates):
             raise ValueError("obs_dates et coupon_rates doivent avoir la même longueur")
         super().__init__(

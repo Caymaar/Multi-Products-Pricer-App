@@ -159,8 +159,8 @@ coupon_rates = [0.05, 0.05, 0.05, 0.05, 0.05]  # 5% par an
 # === 4) Instanciation des produits structurés ===
 products = [
     SweetAutocall(
-        obs_dates          = obs_dates,
-        coupon_rates       = coupon_rates,
+        freq               = "Annuel",
+        coupon_rate        = 0.05,
         pricing_date       = pricing_date,
         maturity_date      = maturity_date,
         coupon_barrier     = 0.8,           # 80% de S0

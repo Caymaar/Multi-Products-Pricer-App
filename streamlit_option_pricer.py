@@ -12,13 +12,13 @@ from pricers.tree_pricer import TreePortfolio
 from pricers.bs_pricer import BSPortfolio
 from rate.product import (
     ZeroCouponBond, FixedRateBond, FloatingRateBond,
-    ForwardRateAgreement, InterestRateSwap
+    ForwardRateAgreement, InterestRateSwap, ForwardRate
 )
 from risk_metrics.greeks import GreeksCalculator
 from option.option import OptionPortfolio
 from market.day_count_convention import DayCountConvention
 
-from app import Category, COMMON_PARAMS, SPECIFIC_PARAMS, plot_strategy_payoff
+from app import Category, COMMON_PARAMS, SPECIFIC_PARAMS, plot_strategy_payoff, Sensitivity
 import pandas as pd
 
 def get_init_parameters(cls_or_fn):
@@ -31,18 +31,17 @@ def get_init_parameters(cls_or_fn):
 # Sidebar
 st.sidebar.header("🛠️ Marché & MC/Tree/BS")
 underlying       = st.sidebar.text_input("Ticker", "LVMH")
-raw_pricing_date = st.sidebar.date_input("Date de valorisation", datetime.today().date(), key="pricing_date")
+raw_pricing_date = st.sidebar.date_input("Date de valorisation", date(2023, 1, 1), key="pricing_date")
 pricing_date     = datetime.combine(raw_pricing_date, _time.min)
 vol_source       = st.sidebar.selectbox("Vol source", ["implied","historical"], key="vol_source")
 hist_window      = st.sidebar.number_input("Hist window", 252, key="hist_window")
 curve_method     = st.sidebar.selectbox("Courbe", ["interpolation","nelson-siegel","svensson"], key="curve_method")
-dcc              = st.sidebar.selectbox("Day count", ["Actual/360","Actual/365","30/360"], key="dcc")
+dcc              = st.sidebar.selectbox("Day count", ["Actual/360","Actual/365","30/360", "Actual/Actual"], key="dcc")
 
 n_paths    = st.sidebar.number_input("MC chemins", 10000, step=1000, key="n_paths")
 n_steps    = st.sidebar.number_input("MC steps", 300, step=10, key="n_steps")
 seed       = st.sidebar.number_input("Seed", 42, key="seed")
 tree_steps = st.sidebar.number_input("Tree steps", 100, step=10, key="tree_steps")
-bs_vol     = st.sidebar.number_input("BS vol", 0.2, key="bs_vol")
 
 market = create_market(
     stock=underlying, pricing_date=pricing_date,
@@ -80,36 +79,11 @@ for tab, category in zip(tabs, Category):
             key = f"{category.name}-{prod.name}-{s['name']}"
             vals[s["name"]] = w(s["label"], key=key, **kw)
 
-        
-
-        if prod.value is SweetAutocall:
-            vals["obs_dates"] = st.date_input(
-                "Observation Dates",
-                value=[pricing_date + timedelta(days=365*i) for i in (1,2,3,4,5)],
-                key="obs_dates",
-                help="Sélectionnez une ou plusieurs dates d’observation"
-            )
-
-            raw = st.text_input(
-                "Coupon Rates (séparés par des virgules)",
-                value="0.05,0.05,0.05,0.05,0.05",
-                key="coupon_rates",
-                help="Entrez les taux annuels séparés par des virgules, p.ex. 0.05,0.05,…"
-            )
-            # Parsing en liste de floats
-            try:
-                vals["coupon_rates"] = [float(x.strip()) for x in raw.split(",") if x.strip()!='']
-            except ValueError:
-                st.error("Format des coupon rates invalide ! Veuillez n’utiliser que des nombres séparés par des virgules.")
-                vals["coupon_rates"] = []
-
         # pricing method selector
         if category is Category.STRUCTURED:
             method = "Structured"
         elif category in (Category.OPTION, Category.STRATEGY):
             method = st.radio("Méthode", ["MC","Tree","BS"], horizontal=True, key=f"mode_{category.name}")
-        else:
-            method = st.radio("Action", ["price","mtm"], horizontal=True, key=f"mode_{category.name}")
 
         if st.button(f"▶️ Pricer {prod.name}", key=f"btn_{category.name}"):
 
@@ -120,6 +94,9 @@ for tab, category in zip(tabs, Category):
             # insert pricing_date if needed
             if "pricing_date" in get_init_parameters(prod.value):
                 vals["pricing_date"] = pricing_date
+
+            if "convention_days" in get_init_parameters(prod.value):
+                vals["convention_days"] = dcc
 
             for k, v in vals.items():
                 if isinstance(v, datetime):
@@ -180,12 +157,45 @@ for tab, category in zip(tabs, Category):
                 df_results = pd.DataFrame([greeks], columns=["delta", "gamma", "vega", "thtea", "rho", "speed"])
                 df_results = df_results.T.rename(columns={0: "value"}).T
 
-            else:  # RATE
-                inst = prod.value(**vals)
-                if method == "price":
+            elif category is Category.RATE:
+
+                if prod.value in [FloatingRateBond, InterestRateSwap]:
+                    vals["forward_curve"] = market.forward
+
+                
+
+                if prod.value in [ZeroCouponBond, FixedRateBond, FloatingRateBond]:
+                    inst = prod.value(**vals)
                     price = inst.price(market.discount)
-                else:
+                elif prod.value is InterestRateSwap:
+                    inst = prod.value(**vals)
                     price = inst.mtm(market.discount)
+                    swap_rate = inst.swap_rate(market.discount)
+                    st.success(f"Swap Rate → {swap_rate:.4%}")
+                    
+                else:
+                    init_params_fwd = get_init_parameters(ForwardRate)
+                    fwd_vals = {k: vals[k] for k in init_params_fwd if k in vals}
+                    
+                    fwd_rate = ForwardRate(**fwd_vals)
+                    strike = fwd_rate.value(market.discount)
+                    vals["strike"] = strike
+                    inst = prod.value(**vals)
+                    st.success(f"Forward Rate → {strike:.4%}")
+                    price = inst.mtm(market.discount)
+
+            if prod.name in Sensitivity.__members__:
+                sens_cls = Sensitivity[prod.name].value
+                sens = sens_cls(inst, market.discount)
+                sensitivity_data = {
+                    "Metric": ["DV01", "Duration", "Convexity"],
+                    "Value": [
+                        round(sens.dv01(), 6),
+                        round(sens.macaulay_duration(), 6),
+                        round(sens.convexity(), 6)
+                    ]
+                }
+                df_results = pd.DataFrame(sensitivity_data)
 
             st.success(f"Prix {prod.name} → {price:.4f}")
             # Si df_results est défini, l'afficher
